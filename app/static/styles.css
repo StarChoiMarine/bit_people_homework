@@ -1,3 +1,33 @@
+:root {
+    --bs-primary: #0c4e98;
+    --bs-primary-rgb: 12, 78, 152;
+    --bs-link-color: #0c4e98;
+    --bs-link-color-rgb: 12, 78, 152;
+    --bs-link-hover-color: #093b73;
+    --bs-link-hover-color-rgb: 9, 59, 115;
+}
+
+.btn-primary {
+    --bs-btn-bg: #0c4e98;
+    --bs-btn-border-color: #0c4e98;
+    --bs-btn-hover-bg: #0a427f;
+    --bs-btn-hover-border-color: #093b73;
+    --bs-btn-active-bg: #093b73;
+    --bs-btn-active-border-color: #083567;
+    --bs-btn-disabled-bg: #0c4e98;
+    --bs-btn-disabled-border-color: #0c4e98;
+}
+
+.btn-outline-primary {
+    --bs-btn-color: #0c4e98;
+    --bs-btn-border-color: #0c4e98;
+    --bs-btn-hover-bg: #0c4e98;
+    --bs-btn-hover-border-color: #0c4e98;
+    --bs-btn-active-bg: #093b73;
+    --bs-btn-active-border-color: #093b73;
+    --bs-btn-disabled-color: #0c4e98;
+}
+
 body {
     min-height: 100vh;
 }
@@ -7,4 +37,3 @@ dd {
     padding-top: 0.4rem;
     padding-bottom: 0.4rem;
 }
-

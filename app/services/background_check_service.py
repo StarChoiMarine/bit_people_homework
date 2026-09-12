@@ -284,7 +284,13 @@ def view_result(
         purge_expired_results(db, viewed_at)
         raise BackgroundCheckResultUnavailableError("결과의 24시간 보관 기한이 만료되었습니다.")
 
+    result_value = result.result
+    result_expires_at = result.expires_at
+
     try:
+        background_check_repository.delete_result(db, result)
+        background_request.result_deleted_at = viewed_at
+        background_request.result_deletion_reason = ResultDeletionReason.ACKNOWLEDGED
         audit_repository.add(
             db,
             AuditLog(
@@ -298,6 +304,16 @@ def view_result(
                 },
             ),
         )
+        audit_repository.add(
+            db,
+            AuditLog(
+                action=AuditAction.ACKNOWLEDGE_BACKGROUND_CHECK_RESULT,
+                actor_employee_number=admin.employee_number,
+                target_employee_number=background_request.employee_number,
+                created_at=viewed_at,
+                details={"request_id": str(background_request.id)},
+            ),
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -306,8 +322,8 @@ def view_result(
     return BackgroundCheckResultView(
         request_id=background_request.id,
         employee_number=background_request.employee_number,
-        result=result.result,
-        expires_at=result.expires_at,
+        result=result_value,
+        expires_at=result_expires_at,
     )
 
 

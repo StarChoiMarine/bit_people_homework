@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}직원 정보 수정 | 관리자{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-2">직원 정보 수정</h1>
+                <p class="text-secondary mb-4">
+                    변경 항목과 작업 관리자는 감사 기록에 남습니다.
+                </p>
+                {% if error %}
+                <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% endif %}
+                <form method="post" action="/admin/employees/{{ employee.employee_number }}/edit">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="employee_number">사번</label>
+                            <input class="form-control" id="employee_number"
+                                   value="{{ employee.employee_number }}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="employment_status">재직 상태</label>
+                            <input class="form-control" id="employment_status"
+                                   value="{{ employee.employment_status.value }}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="terminated_at">퇴사 시각</label>
+                            <input class="form-control" id="terminated_at"
+                                   value="{{ employee.terminated_at or '-' }}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="login_id">로그인 아이디</label>
+                            <input class="form-control" id="login_id" name="login_id"
+                                   maxlength="50"
+                                   value="{{ form_data.get('login_id', employee.login_id) }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="family_name">성</label>
+                            <input class="form-control name-part" id="family_name" name="family_name"
+                                   maxlength="50"
+                                   value="{{ form_data.get('family_name', employee.family_name) }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="given_name">이름</label>
+                            <input class="form-control name-part" id="given_name" name="given_name"
+                                   maxlength="50"
+                                   value="{{ form_data.get('given_name', employee.given_name) }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="full_name">성명</label>
+                            <input class="form-control" id="full_name"
+                                   value="{{ form_data.get('full_name', employee.full_name) }}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="date_of_birth">생년월일</label>
+                            <input class="form-control" id="date_of_birth" name="date_of_birth"
+                                   type="date"
+                                   value="{{ form_data.get('date_of_birth', employee.date_of_birth or '') }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="role">역할</label>
+                            {% set selected_role = form_data.get('role', employee.role.value) %}
+                            <select class="form-select" id="role" name="role" required>
+                                {% for role_item in roles %}
+                                <option value="{{ role_item.value }}"
+                                        {% if selected_role == role_item.value %}selected{% endif %}>
+                                    {{ role_item.value }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="new_password">새 비밀번호</label>
+                            <input class="form-control" id="new_password" name="new_password"
+                                   type="password" autocomplete="new-password" maxlength="1024">
+                            <div class="form-text">
+                                변경할 때만 입력하세요. 8자 이상이며 특수문자가 필요합니다.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning mt-4 mb-0" role="alert">
+                        로그인 아이디·역할·비밀번호를 바꾸면 해당 직원의 기존 세션이 즉시 종료됩니다.
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a class="btn btn-outline-secondary"
+                           href="/admin/employees/{{ employee.employee_number }}">취소</a>
+                        <button class="btn btn-primary" type="submit">수정 저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function updateFullName() {
+        const familyName = document.getElementById("family_name").value.trim();
+        const givenName = document.getElementById("given_name").value.trim();
+        document.getElementById("full_name").value = familyName + givenName;
+    }
+
+    document.querySelectorAll(".name-part").forEach(function (input) {
+        input.addEventListener("input", updateFullName);
+    });
+</script>
+{% endblock %}

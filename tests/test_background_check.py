@@ -129,7 +129,7 @@ class BackgroundCheckTest(unittest.TestCase):
             )
             return request.id
 
-    def test_admin_request_view_acknowledge_and_sensitive_data_minimization(
+    def test_admin_request_view_auto_acknowledge_and_sensitive_data_minimization(
         self,
     ) -> None:
         clock = MutableClock(datetime(2026, 9, 12, 9, 0, 0))
@@ -249,6 +249,9 @@ class BackgroundCheckTest(unittest.TestCase):
             self.assertEqual(view_response.headers["cache-control"], "no-store")
             self.assertIn("CLEAR", view_response.text)
             self.assertIn("감사 로그에 기록되었습니다", view_response.text)
+            self.assertIn("열람과 동시에 서버에서 삭제", view_response.text)
+            self.assertIn("확인 및 정보파기", view_response.text)
+            self.assertNotIn("직원 목록으로 이동", view_response.text)
             self.assertNotIn("criminalRecord", view_response.text)
             self.assertNotIn("creditScore", view_response.text)
 
@@ -263,21 +266,43 @@ class BackgroundCheckTest(unittest.TestCase):
                         AuditLog.action == AuditAction.VIEW_BACKGROUND_CHECK_RESULT
                     )
                 )
+                acknowledge_audit = db.scalar(
+                    select(AuditLog).where(
+                        AuditLog.action
+                        == AuditAction.ACKNOWLEDGE_BACKGROUND_CHECK_RESULT
+                    )
+                )
                 self.assertEqual(request_audit.details, {"request_id": str(request_id)})
                 self.assertEqual(view_audit.details["access_reason"], "인사 적합성 검토")
+                self.assertEqual(
+                    acknowledge_audit.details,
+                    {"request_id": str(request_id)},
+                )
                 audit_text = json.dumps(
-                    [request_audit.details, view_audit.details],
+                    [
+                        request_audit.details,
+                        view_audit.details,
+                        acknowledge_audit.details,
+                    ],
                     ensure_ascii=False,
                 )
                 self.assertNotIn("CLEAR", audit_text)
                 self.assertNotIn("criminal", audit_text.lower())
                 self.assertNotIn("credit", audit_text.lower())
 
-            acknowledge_response = admin_client.post(
-                f"/admin/background-check-requests/{request_id}/acknowledge",
-                follow_redirects=False,
-            )
-            self.assertEqual(acknowledge_response.status_code, 303)
+                self.assertIsNone(db.get(BackgroundCheckResult, request_id))
+                background_request = db.get(BackgroundCheckRequest, request_id)
+                self.assertEqual(
+                    background_request.result_deletion_reason,
+                    ResultDeletionReason.ACKNOWLEDGED,
+                )
+                self.assertIsNotNone(background_request.result_deleted_at)
+
+            detail_after_view = admin_client.get("/admin/employees/EMP-003")
+            self.assertIn("확인 완료로 삭제됨", detail_after_view.text)
+
+            home_after_view = admin_client.get("/", follow_redirects=False)
+            self.assertEqual(home_after_view.status_code, 303)
 
             view_after_acknowledgement = admin_client.post(
                 f"/admin/background-check-requests/{request_id}/view",
@@ -306,16 +331,6 @@ class BackgroundCheckTest(unittest.TestCase):
                 self.assertEqual(
                     db.scalar(select(func.count()).select_from(Employee)),
                     11,
-                )
-                acknowledge_audit = db.scalar(
-                    select(AuditLog).where(
-                        AuditLog.action
-                        == AuditAction.ACKNOWLEDGE_BACKGROUND_CHECK_RESULT
-                    )
-                )
-                self.assertEqual(
-                    acknowledge_audit.details,
-                    {"request_id": str(request_id)},
                 )
 
     def test_pending_ui_status_api_and_unified_attention_badge(self) -> None:

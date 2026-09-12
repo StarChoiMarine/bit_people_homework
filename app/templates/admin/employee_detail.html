@@ -19,6 +19,16 @@
                         </thead>
                         <tbody>
                             <tr>
+                                <th>성</th>
+                                <td>{{ pending_request.old_family_name }}</td>
+                                <td>{{ pending_request.requested_family_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>이름</th>
+                                <td>{{ pending_request.old_given_name }}</td>
+                                <td>{{ pending_request.requested_given_name }}</td>
+                            </tr>
+                            <tr>
                                 <th>성명</th>
                                 <td>{{ pending_request.old_family_name }}{{ pending_request.old_given_name }}</td>
                                 <td>{{ pending_request.requested_family_name }}{{ pending_request.requested_given_name }}</td>
@@ -79,6 +89,12 @@
                 </dl>
 
                 <hr class="my-4">
+                {% if employee.employee_number != current_user.employee_number %}
+                <a class="btn btn-outline-primary me-2"
+                   href="/admin/employees/{{ employee.employee_number }}/edit/verify-password">
+                    직원 정보 수정
+                </a>
+                {% endif %}
                 {% if employee.employment_status.value == "TERMINATED" %}
                 <button class="btn btn-secondary" type="button" disabled>퇴사 처리 완료</button>
                 {% elif employee.employee_number == current_user.employee_number %}

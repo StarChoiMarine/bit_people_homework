@@ -3,6 +3,7 @@ from sqlalchemy import Engine
 
 AUDIT_ACTIONS = (
     "CREATE_EMPLOYEE",
+    "UPDATE_EMPLOYEE",
     "TERMINATE_EMPLOYEE",
     "REQUEST_PROFILE_CHANGE",
     "APPROVE_PROFILE_CHANGE",

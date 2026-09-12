@@ -378,6 +378,196 @@ class AuthenticationTest(unittest.TestCase):
                 login_response.text,
             )
 
+    def test_admin_employee_edit_requires_password_and_writes_audit_log(self) -> None:
+        with TestClient(app) as employee_client, TestClient(app) as admin_client:
+            employee_client.post(
+                "/login",
+                data={"login_id": "emp006", "password": "tjsdnwls@@"},
+            )
+            admin_client.post(
+                "/login",
+                data={"login_id": "admin", "password": "admin123"},
+            )
+
+            self.assertEqual(
+                employee_client.get(
+                    "/admin/employees/EMP-006/edit/verify-password"
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                admin_client.get(
+                    "/admin/employees/ADM-001/edit/verify-password"
+                ).status_code,
+                403,
+            )
+
+            unverified_response = admin_client.get(
+                "/admin/employees/EMP-006/edit",
+                follow_redirects=False,
+            )
+            self.assertEqual(unverified_response.status_code, 303)
+            self.assertEqual(
+                unverified_response.headers["location"],
+                "/admin/employees/EMP-006/edit/verify-password",
+            )
+
+            wrong_password_response = admin_client.post(
+                "/admin/employees/EMP-006/edit/verify-password",
+                data={"password": "wrong-password@@"},
+            )
+            self.assertEqual(wrong_password_response.status_code, 401)
+            self.assertIn("비밀번호가 올바르지 않습니다.", wrong_password_response.text)
+
+            verify_response = admin_client.post(
+                "/admin/employees/EMP-006/edit/verify-password",
+                data={"password": "admin123"},
+                follow_redirects=False,
+            )
+            self.assertEqual(verify_response.status_code, 303)
+
+            edit_form = admin_client.get("/admin/employees/EMP-006/edit")
+            self.assertEqual(edit_form.status_code, 200)
+            self.assertIn("updateFullName", edit_form.text)
+            self.assertIn("사번", edit_form.text)
+            self.assertIn("재직 상태", edit_form.text)
+            self.assertIn("퇴사 시각", edit_form.text)
+
+            update_response = admin_client.post(
+                "/admin/employees/EMP-006/edit",
+                data={
+                    "login_id": "sunwoo-jin",
+                    "family_name": "선우",
+                    "given_name": "진",
+                    "date_of_birth": "1991-05-06",
+                    "role": "ADMIN",
+                    "new_password": "changed-password@@",
+                    "employee_number": "ADM-001",
+                    "employment_status": "TERMINATED",
+                    "terminated_at": "2020-01-01T00:00:00",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(update_response.status_code, 303)
+            self.assertEqual(
+                update_response.headers["location"],
+                "/admin/employees/EMP-006",
+            )
+
+            with SessionLocal() as db:
+                employee = db.get(Employee, "EMP-006")
+                self.assertEqual(employee.employee_number, "EMP-006")
+                self.assertEqual(employee.login_id, "sunwoo-jin")
+                self.assertEqual(employee.family_name, "선우")
+                self.assertEqual(employee.given_name, "진")
+                self.assertEqual(employee.full_name, "선우진")
+                self.assertEqual(employee.date_of_birth.isoformat(), "1991-05-06")
+                self.assertEqual(employee.role.value, "ADMIN")
+                self.assertEqual(employee.employment_status, EmploymentStatus.ACTIVE)
+                self.assertIsNone(employee.terminated_at)
+                self.assertTrue(
+                    verify_password("changed-password@@", employee.password_hash)
+                )
+
+                audit_log = db.scalar(
+                    select(AuditLog).where(
+                        AuditLog.action == AuditAction.UPDATE_EMPLOYEE
+                    )
+                )
+                self.assertEqual(audit_log.actor_employee_number, "ADM-001")
+                self.assertEqual(audit_log.target_employee_number, "EMP-006")
+                self.assertEqual(
+                    set(audit_log.details["changed_fields"].split(",")),
+                    {
+                        "login_id",
+                        "family_name",
+                        "given_name",
+                        "date_of_birth",
+                        "role",
+                        "password",
+                    },
+                )
+                self.assertEqual(audit_log.details["sessions_revoked"], "1")
+                self.assertNotIn("changed-password", str(audit_log.details))
+                self.assertEqual(
+                    db.scalar(select(func.count()).select_from(ProfileEditGrant)),
+                    0,
+                )
+
+            self.assertEqual(employee_client.get("/employees/me").status_code, 401)
+
+            second_update_without_verification = admin_client.post(
+                "/admin/employees/EMP-006/edit",
+                data={
+                    "login_id": "sunwoo-jin-2",
+                    "family_name": "선우",
+                    "given_name": "진",
+                    "date_of_birth": "1991-05-06",
+                    "role": "ADMIN",
+                    "new_password": "",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(second_update_without_verification.status_code, 303)
+            self.assertEqual(
+                second_update_without_verification.headers["location"],
+                "/admin/employees/EMP-006/edit/verify-password",
+            )
+
+        with TestClient(app) as updated_employee_client:
+            old_login_response = updated_employee_client.post(
+                "/login",
+                data={"login_id": "emp006", "password": "tjsdnwls@@"},
+            )
+            self.assertEqual(old_login_response.status_code, 401)
+            new_login_response = updated_employee_client.post(
+                "/login",
+                data={
+                    "login_id": "sunwoo-jin",
+                    "password": "changed-password@@",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(new_login_response.status_code, 303)
+            self.assertEqual(
+                new_login_response.headers["location"],
+                "/admin/employees",
+            )
+
+    def test_change_request_shows_family_and_given_name_separately(self) -> None:
+        with TestClient(app) as employee_client, TestClient(app) as admin_client:
+            employee_client.post(
+                "/login",
+                data={"login_id": "emp006", "password": "tjsdnwls@@"},
+            )
+            admin_client.post(
+                "/login",
+                data={"login_id": "admin", "password": "admin123"},
+            )
+            employee_client.post(
+                "/employees/me/edit/verify-password",
+                data={"password": "tjsdnwls@@"},
+            )
+            request_response = employee_client.post(
+                "/employees/me/edit",
+                data={
+                    "family_name": "선우",
+                    "given_name": "진",
+                    "date_of_birth": "1991-05-05",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(request_response.status_code, 303)
+
+            detail_response = admin_client.get("/admin/employees/EMP-006")
+            self.assertEqual(detail_response.status_code, 200)
+            self.assertIn("<th>성</th>", detail_response.text)
+            self.assertIn("<td>선</td>", detail_response.text)
+            self.assertIn("<td>선우</td>", detail_response.text)
+            self.assertIn("<th>이름</th>", detail_response.text)
+            self.assertIn("<td>우진</td>", detail_response.text)
+            self.assertIn("<td>진</td>", detail_response.text)
+
     def test_profile_change_request_approval_rejection_and_audit(self) -> None:
         with TestClient(app) as employee_client, TestClient(app) as admin_client:
             employee_client.post(

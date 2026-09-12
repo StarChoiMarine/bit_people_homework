@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.employee import Employee, EmployeeRole
 from app.services import (
+    auth_service,
     background_check_service,
     change_request_service,
     employee_service,
@@ -162,6 +163,177 @@ def create_employee(
 
     return RedirectResponse(
         url=f"/admin/employees/{employee.employee_number}",
+        status_code=303,
+    )
+
+
+def _get_editable_employee(
+    db: Session,
+    employee_number: str,
+    admin: Employee,
+) -> Employee:
+    employee = employee_service.get_employee_detail(db, employee_number)
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="직원을 찾을 수 없습니다.",
+        )
+    if employee.employee_number == admin.employee_number:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "관리자 자신의 정보는 정보 변경 요청을 통해 "
+                "다른 관리자의 승인을 받아야 합니다."
+            ),
+        )
+    return employee
+
+
+@router.get("/employees/{employee_number}/edit/verify-password")
+def employee_edit_password_form(
+    employee_number: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    employee = _get_editable_employee(db, employee_number, admin)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/employee_edit_verify_password.html",
+        context={
+            "current_user": admin,
+            "employee": employee,
+            "error": None,
+        },
+    )
+
+
+@router.post("/employees/{employee_number}/edit/verify-password")
+def verify_employee_edit_password(
+    employee_number: str,
+    request: Request,
+    password: Annotated[str, Form()],
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    employee = _get_editable_employee(db, employee_number, admin)
+    session_id = request.cookies[auth_service.SESSION_COOKIE_NAME]
+    if not auth_service.verify_password_for_profile_edit(
+        db,
+        session_id,
+        admin,
+        password,
+    ):
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/employee_edit_verify_password.html",
+            context={
+                "current_user": admin,
+                "employee": employee,
+                "error": "비밀번호가 올바르지 않습니다.",
+            },
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    return RedirectResponse(
+        url=f"/admin/employees/{employee_number}/edit",
+        status_code=303,
+    )
+
+
+@router.get("/employees/{employee_number}/edit")
+def employee_edit_form(
+    employee_number: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    employee = _get_editable_employee(db, employee_number, admin)
+    session_id = request.cookies[auth_service.SESSION_COOKIE_NAME]
+    if not auth_service.has_profile_edit_grant(db, session_id):
+        return RedirectResponse(
+            url=f"/admin/employees/{employee_number}/edit/verify-password",
+            status_code=303,
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/employee_edit.html",
+        context={
+            "current_user": admin,
+            "employee": employee,
+            "roles": list(EmployeeRole),
+            "form_data": {},
+            "error": None,
+        },
+    )
+
+
+@router.post("/employees/{employee_number}/edit")
+def update_employee(
+    employee_number: str,
+    request: Request,
+    login_id: Annotated[str, Form()],
+    family_name: Annotated[str, Form()],
+    given_name: Annotated[str, Form()],
+    role: Annotated[str, Form()],
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+    date_of_birth: Annotated[str, Form()] = "",
+    new_password: Annotated[str, Form()] = "",
+):
+    employee = _get_editable_employee(db, employee_number, admin)
+    session_id = request.cookies[auth_service.SESSION_COOKIE_NAME]
+    form_data = {
+        "login_id": login_id,
+        "family_name": family_name,
+        "given_name": given_name,
+        "full_name": f"{family_name.strip()}{given_name.strip()}",
+        "date_of_birth": date_of_birth,
+        "role": role,
+    }
+    try:
+        updated_employee = employee_service.update_employee_by_admin(
+            db=db,
+            employee_number=employee_number,
+            actor_employee_number=admin.employee_number,
+            session_id=session_id,
+            login_id=login_id,
+            family_name=family_name,
+            given_name=given_name,
+            date_of_birth_text=date_of_birth,
+            role_text=role,
+            new_password=new_password,
+        )
+    except auth_service.ProfileEditAuthorizationError:
+        return RedirectResponse(
+            url=f"/admin/employees/{employee_number}/edit/verify-password",
+            status_code=303,
+        )
+    except employee_service.SelfAdminEditError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
+    except employee_service.EmployeeUpdateError as error:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/employee_edit.html",
+            context={
+                "current_user": admin,
+                "employee": employee,
+                "roles": list(EmployeeRole),
+                "form_data": form_data,
+                "error": str(error),
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if updated_employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="직원을 찾을 수 없습니다.",
+        )
+    return RedirectResponse(
+        url=f"/admin/employees/{updated_employee.employee_number}",
         status_code=303,
     )
 

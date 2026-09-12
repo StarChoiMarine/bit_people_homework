@@ -15,7 +15,8 @@
                 <h1 class="h4 mb-3">Background Check 결과</h1>
                 <p class="text-secondary">{{ employee.full_name }} ({{ employee.employee_number }})</p>
                 <div class="alert alert-warning text-start" role="alert">
-                    이 결과 열람은 관리자 사번, 열람 사유, 열람 시각과 함께 감사 로그에 기록되었습니다.
+                    이 결과 열람과 확인 완료는 관리자 사번, 열람 사유, 열람 시각과 함께
+                    감사 로그에 기록되었습니다.
                     외부 API의 상세 검증 정보는 저장하거나 표시하지 않습니다.
                 </div>
                 {% if result_view.result.value == "CLEAR" %}
@@ -24,12 +25,14 @@
                 <div class="display-6 text-danger fw-semibold my-4">FLAGGED</div>
                 {% endif %}
                 <p class="small text-secondary mb-4">
-                    미확인 상태로도 {{ result_view.expires_at }} 이후 자동 삭제됩니다.
+                    임시 결과는 열람과 동시에 서버에서 삭제되어 다시 조회할 수 없습니다.
                 </p>
-                <form method="post"
-                      action="/admin/background-check-requests/{{ result_view.request_id }}/acknowledge">
-                    <button class="btn btn-primary" type="submit">확인 완료 및 결과 삭제</button>
-                </form>
+                <div class="d-flex justify-content-center">
+                    <a class="btn btn-primary"
+                       href="/admin/employees/{{ employee.employee_number }}">
+                        확인 및 정보파기
+                    </a>
+                </div>
             </div>
         </div>
     </div>
