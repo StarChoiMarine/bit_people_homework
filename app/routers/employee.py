@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_employee, require_employee
+from app.dependencies import get_current_employee
 from app.models.employee import Employee
 from app.services import auth_service, change_request_service
 from app.web import templates
@@ -45,7 +45,7 @@ def my_profile(
 @router.post("/me/change-request-notice/dismiss")
 def dismiss_change_request_notice(
     db: Annotated[Session, Depends(get_db)],
-    current_employee: Annotated[Employee, Depends(require_employee)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
 ):
     change_request_service.dismiss_rejected_change_request_notices(
         db,
@@ -57,7 +57,7 @@ def dismiss_change_request_notice(
 @router.get("/me/edit/verify-password")
 def profile_edit_password_form(
     request: Request,
-    current_employee: Annotated[Employee, Depends(require_employee)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
 ):
     return templates.TemplateResponse(
         request=request,
@@ -74,7 +74,7 @@ def verify_profile_edit_password(
     request: Request,
     password: Annotated[str, Form()],
     db: Annotated[Session, Depends(get_db)],
-    current_employee: Annotated[Employee, Depends(require_employee)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
 ):
     session_id = request.cookies[auth_service.SESSION_COOKIE_NAME]
     if not auth_service.verify_password_for_profile_edit(
@@ -99,7 +99,7 @@ def verify_profile_edit_password(
 def profile_edit_form(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    current_employee: Annotated[Employee, Depends(require_employee)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
 ):
     session_id = request.cookies[auth_service.SESSION_COOKIE_NAME]
     if not auth_service.has_profile_edit_grant(db, session_id):
@@ -125,7 +125,7 @@ def submit_my_profile_change_request(
     family_name: Annotated[str, Form()],
     given_name: Annotated[str, Form()],
     db: Annotated[Session, Depends(get_db)],
-    current_employee: Annotated[Employee, Depends(require_employee)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
     date_of_birth: Annotated[str, Form()] = "",
 ):
     session_id = request.cookies[auth_service.SESSION_COOKIE_NAME]

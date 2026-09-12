@@ -140,11 +140,14 @@ class AuthenticationTest(unittest.TestCase):
                 data={"login_id": "admin", "password": "admin123"},
             )
             self.assertEqual(admin_client.get("/admin/employees/new").status_code, 200)
+            new_employee_form = admin_client.get("/admin/employees/new")
+            self.assertIn("updateFullName", new_employee_form.text)
+            self.assertIn("readonly", new_employee_form.text)
 
             employee_data = {
                 "employee_number": "EMP-011",
                 "login_id": "emp011",
-                "full_name": "윤하늘",
+                "full_name": "조작된성명",
                 "family_name": "윤",
                 "given_name": "하늘",
                 "date_of_birth": "1997-01-02",
@@ -165,6 +168,7 @@ class AuthenticationTest(unittest.TestCase):
             with SessionLocal() as db:
                 employee = db.get(Employee, "EMP-011")
                 self.assertEqual(employee.login_id, "emp011")
+                self.assertEqual(employee.full_name, "윤하늘")
                 self.assertEqual(employee.employment_status, EmploymentStatus.ACTIVE)
                 self.assertIsNone(employee.terminated_at)
                 self.assertNotEqual(employee.password_hash, "newpass@@")
@@ -178,6 +182,7 @@ class AuthenticationTest(unittest.TestCase):
                 )
                 self.assertEqual(audit_log.actor_employee_number, "ADM-001")
                 self.assertEqual(audit_log.details["login_id"], "emp011")
+                self.assertEqual(audit_log.details["full_name"], "윤하늘")
                 self.assertNotIn("password", audit_log.details)
 
             duplicate_number_data = employee_data | {
@@ -589,13 +594,17 @@ class AuthenticationTest(unittest.TestCase):
                 "최근 정보수정 요청이 거절되었습니다. 관리자에게 문의하세요.",
                 rejection_notice.text,
             )
-            self.assertEqual(
-                admin_client.post(
-                    "/employees/me/change-request-notice/dismiss",
-                    follow_redirects=False,
-                ).status_code,
-                403,
+            admin_dismiss_response = admin_client.post(
+                "/employees/me/change-request-notice/dismiss",
+                follow_redirects=False,
             )
+            self.assertEqual(admin_dismiss_response.status_code, 303)
+            with SessionLocal() as db:
+                employee_rejection = db.get(
+                    EmployeeChangeRequest,
+                    rejected_request_id,
+                )
+                self.assertIsNone(employee_rejection.employee_acknowledged_at)
 
             dismiss_response = employee_client.post(
                 "/employees/me/change-request-notice/dismiss",
@@ -714,6 +723,133 @@ class AuthenticationTest(unittest.TestCase):
                 follow_redirects=False,
             )
             self.assertEqual(new_password_login.status_code, 303)
+
+    def test_admin_self_service_and_separate_admin_approval(self) -> None:
+        with TestClient(app) as requesting_admin, TestClient(app) as reviewing_admin:
+            requesting_admin.post(
+                "/login",
+                data={"login_id": "admin", "password": "admin123"},
+            )
+
+            create_reviewer_response = requesting_admin.post(
+                "/admin/employees/new",
+                data={
+                    "employee_number": "ADM-002",
+                    "login_id": "reviewer",
+                    "family_name": "검토",
+                    "given_name": "관리자",
+                    "date_of_birth": "",
+                    "role": "ADMIN",
+                    "password": "reviewer@@",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(create_reviewer_response.status_code, 303)
+
+            my_profile = requesting_admin.get("/employees/me")
+            self.assertEqual(my_profile.status_code, 200)
+            self.assertIn("내 정보 수정", my_profile.text)
+            self.assertIn("비밀번호 변경", my_profile.text)
+
+            verify_response = requesting_admin.post(
+                "/employees/me/edit/verify-password",
+                data={"password": "admin123"},
+                follow_redirects=False,
+            )
+            self.assertEqual(verify_response.status_code, 303)
+
+            request_response = requesting_admin.post(
+                "/employees/me/edit",
+                data={
+                    "family_name": "플랫폼",
+                    "given_name": "관리자",
+                    "date_of_birth": "",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(request_response.status_code, 303)
+
+            with SessionLocal() as db:
+                change_request = db.scalar(
+                    select(EmployeeChangeRequest).where(
+                        EmployeeChangeRequest.employee_number == "ADM-001",
+                        EmployeeChangeRequest.status == ChangeRequestStatus.PENDING,
+                    )
+                )
+                request_id = change_request.id
+
+            own_detail = requesting_admin.get("/admin/employees/ADM-001")
+            self.assertIn("자신의 요청은 다른 관리자가 검토해야 합니다.", own_detail.text)
+
+            self_approval = requesting_admin.post(
+                f"/admin/change-requests/{request_id}/approve",
+                follow_redirects=False,
+            )
+            self.assertEqual(self_approval.status_code, 403)
+            self_rejection = requesting_admin.post(
+                f"/admin/change-requests/{request_id}/reject",
+                follow_redirects=False,
+            )
+            self.assertEqual(self_rejection.status_code, 403)
+
+            with SessionLocal() as db:
+                administrator = db.get(Employee, "ADM-001")
+                unchanged_request = db.get(EmployeeChangeRequest, request_id)
+                self.assertEqual(administrator.full_name, "시스템관리자")
+                self.assertEqual(unchanged_request.status, ChangeRequestStatus.PENDING)
+
+            reviewer_login = reviewing_admin.post(
+                "/login",
+                data={"login_id": "reviewer", "password": "reviewer@@"},
+                follow_redirects=False,
+            )
+            self.assertEqual(reviewer_login.status_code, 303)
+            reviewer_detail = reviewing_admin.get("/admin/employees/ADM-001")
+            self.assertIn("플랫폼관리자", reviewer_detail.text)
+
+            approval_response = reviewing_admin.post(
+                f"/admin/change-requests/{request_id}/approve",
+                follow_redirects=False,
+            )
+            self.assertEqual(approval_response.status_code, 303)
+
+            password_form = requesting_admin.get("/employees/me/password")
+            self.assertEqual(password_form.status_code, 200)
+            password_response = requesting_admin.post(
+                "/employees/me/password",
+                data={
+                    "current_password": "admin123",
+                    "new_password": "new-admin@@",
+                    "new_password_confirmation": "new-admin@@",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(password_response.status_code, 303)
+
+            with SessionLocal() as db:
+                administrator = db.get(Employee, "ADM-001")
+                approved_request = db.get(EmployeeChangeRequest, request_id)
+                self.assertEqual(administrator.full_name, "플랫폼관리자")
+                self.assertTrue(
+                    verify_password("new-admin@@", administrator.password_hash)
+                )
+                self.assertEqual(approved_request.status, ChangeRequestStatus.APPROVED)
+                self.assertEqual(approved_request.reviewed_by, "ADM-002")
+
+                approval_audit = db.scalar(
+                    select(AuditLog).where(
+                        AuditLog.action == AuditAction.APPROVE_PROFILE_CHANGE,
+                        AuditLog.target_employee_number == "ADM-001",
+                    )
+                )
+                self.assertEqual(approval_audit.actor_employee_number, "ADM-002")
+                password_audit = db.scalar(
+                    select(AuditLog).where(
+                        AuditLog.action == AuditAction.CHANGE_PASSWORD,
+                        AuditLog.target_employee_number == "ADM-001",
+                    )
+                )
+                self.assertEqual(password_audit.actor_employee_number, "ADM-001")
 
 
 if __name__ == "__main__":

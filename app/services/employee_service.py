@@ -70,7 +70,6 @@ def create_employee(
     db: Session,
     employee_number: str,
     login_id: str,
-    full_name: str,
     family_name: str,
     given_name: str,
     date_of_birth_text: str,
@@ -80,13 +79,13 @@ def create_employee(
 ) -> Employee:
     employee_number = employee_number.strip().upper()
     login_id = login_id.strip().lower()
-    full_name = full_name.strip()
     family_name = family_name.strip()
     given_name = given_name.strip()
+    full_name = f"{family_name}{given_name}"
     date_of_birth_text = date_of_birth_text.strip()
     role_text = role_text.strip().upper()
 
-    if not all((employee_number, login_id, full_name, family_name, given_name)):
+    if not all((employee_number, login_id, family_name, given_name)):
         raise EmployeeCreationError("필수 항목을 모두 입력해 주세요.")
     if employee_repository.get_by_employee_number(db, employee_number) is not None:
         raise EmployeeCreationError("이미 사용 중인 사번입니다.")

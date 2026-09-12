@@ -33,6 +33,10 @@ class ChangeRequestAlreadyReviewedError(ChangeRequestError):
     pass
 
 
+class SelfReviewError(ChangeRequestError):
+    pass
+
+
 def _parse_date_of_birth(value: str) -> date | None:
     try:
         return date.fromisoformat(value) if value else None
@@ -132,6 +136,8 @@ def approve_change_request(
     change_request = change_request_repository.get_by_id(db, request_id)
     if change_request is None:
         return None
+    if change_request.employee_number == reviewer_employee_number:
+        raise SelfReviewError("자신의 정보 변경 요청은 직접 승인할 수 없습니다.")
     if change_request.status != ChangeRequestStatus.PENDING:
         raise ChangeRequestAlreadyReviewedError("이미 처리된 변경 요청입니다.")
 
@@ -183,6 +189,8 @@ def reject_change_request(
     change_request = change_request_repository.get_by_id(db, request_id)
     if change_request is None:
         return None
+    if change_request.employee_number == reviewer_employee_number:
+        raise SelfReviewError("자신의 정보 변경 요청은 직접 거절할 수 없습니다.")
     if change_request.status != ChangeRequestStatus.PENDING:
         raise ChangeRequestAlreadyReviewedError("이미 처리된 변경 요청입니다.")
 

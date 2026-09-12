@@ -37,18 +37,16 @@
                 </dl>
                 <hr class="my-4">
                 <div class="d-flex gap-2">
-                {% if current_user.role.value == "EMPLOYEE" %}
                     {% if pending_request %}
                     <button class="btn btn-secondary" type="button" disabled>변경 요청 검토 대기 중</button>
                     {% else %}
-                <a class="btn btn-primary" href="/employees/me/edit/verify-password">
-                    내 정보 수정
-                </a>
+                    <a class="btn btn-primary" href="/employees/me/edit/verify-password">
+                        내 정보 수정
+                    </a>
                     {% endif %}
-                {% endif %}
-                <a class="btn btn-outline-primary" href="/employees/me/password">
-                    비밀번호 변경
-                </a>
+                    <a class="btn btn-outline-primary" href="/employees/me/password">
+                        비밀번호 변경
+                    </a>
                 </div>
             </div>
         </div>

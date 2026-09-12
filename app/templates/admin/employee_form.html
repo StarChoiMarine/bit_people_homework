@@ -29,8 +29,9 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="full_name">성명</label>
-                            <input class="form-control" id="full_name" name="full_name"
-                                   value="{{ form_data.get('full_name', '') }}" required>
+                            <input class="form-control" id="full_name"
+                                   value="{{ form_data.get('full_name', '') }}" readonly>
+                            <div class="form-text">성과 이름을 입력하면 자동으로 완성됩니다.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="family_name">성</label>
@@ -73,5 +74,17 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
+<script>
+    const familyNameInput = document.getElementById("family_name");
+    const givenNameInput = document.getElementById("given_name");
+    const fullNameInput = document.getElementById("full_name");
+
+    function updateFullName() {
+        fullNameInput.value = familyNameInput.value.trim() + givenNameInput.value.trim();
+    }
+
+    familyNameInput.addEventListener("input", updateFullName);
+    givenNameInput.addEventListener("input", updateFullName);
+</script>
+{% endblock %}

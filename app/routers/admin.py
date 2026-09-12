@@ -59,7 +59,6 @@ def create_employee(
     admin: Annotated[Employee, Depends(require_admin)],
     employee_number: Annotated[str, Form()],
     login_id: Annotated[str, Form()],
-    full_name: Annotated[str, Form()],
     family_name: Annotated[str, Form()],
     given_name: Annotated[str, Form()],
     role: Annotated[str, Form()],
@@ -69,7 +68,7 @@ def create_employee(
     form_data = {
         "employee_number": employee_number,
         "login_id": login_id,
-        "full_name": full_name,
+        "full_name": f"{family_name.strip()}{given_name.strip()}",
         "family_name": family_name,
         "given_name": given_name,
         "date_of_birth": date_of_birth,
@@ -81,7 +80,6 @@ def create_employee(
             db=db,
             employee_number=employee_number,
             login_id=login_id,
-            full_name=full_name,
             family_name=family_name,
             given_name=given_name,
             date_of_birth_text=date_of_birth,
@@ -189,6 +187,11 @@ def _review_change_request(
                 request_id,
                 reviewer_employee_number=admin.employee_number,
             )
+    except change_request_service.SelfReviewError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
     except change_request_service.ChangeRequestError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
