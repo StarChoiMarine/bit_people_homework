@@ -143,19 +143,19 @@ DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테�
 아래 계정은 기능 확인을 위한 초기 데이터입니다. 비밀번호는 데이터베이스에 평문으로
 저장하지 않고 시작 시 매번 임의 salt를 사용해 `scrypt` 해시로 저장합니다.
 
-| 사번 | 성명 | 성 / 이름 | 생년월일 | 역할 | 로그인 아이디 | 초기 비밀번호 |
-|---|---|---|---|---|---|---|
-| ADM-001 | 시스템관리자 | 시스템 / 관리자 | 확인되지 않음 | ADMIN | `admin` | `admin123` |
-| EMP-001 | 김민준 | 김 / 민준 | 1990-03-15 | EMPLOYEE | `emp001` | `rlaalswns@@` |
-| EMP-002 | 김민준 | 김 / 민준 | 1994-11-02 | EMPLOYEE | `emp002` | `rlaalswns@@` |
-| EMP-003 | 남궁서준 | 남궁 / 서준 | 1988-07-21 | EMPLOYEE | `emp003` | `skarndtjwns@@` |
-| EMP-004 | 황보라온 | 황보 / 라온 | 1995-02-09 | EMPLOYEE | `emp004` | `ghkdqhfkdhs@@` |
-| EMP-005 | 김솔 | 김 / 솔 | 1992-12-30 | EMPLOYEE | `emp005` | `rlathf@@` |
-| EMP-006 | 선우진 | 선 / 우진 | 1991-05-05 | EMPLOYEE | `emp006` | `tjsdnwls@@` |
-| EMP-007 | 이서연 | 이 / 서연 | 확인되지 않음 | EMPLOYEE | `emp007` | `dltjdus@@` |
-| EMP-008 | 박민준 | 박 / 민준 | 1993-08-17 | EMPLOYEE | `emp008` | `qkralswns@@` |
-| EMP-009 | 최지우 | 최 / 지우 | 1996-04-03 | EMPLOYEE | `emp009` | `chlwldn@@` |
-| EMP-010 | 정하윤 | 정 / 하윤 | 1989-10-11 | EMPLOYEE | `emp010` | `wjdgkdbs@@` |
+| 사번 | 성명 | 성 / 이름 | 역할 | 로그인 아이디 | 초기 비밀번호 |
+|---|---|---|---|---|---|
+| ADM-001 | 시스템관리자 | 시스템 / 관리자 | ADMIN | `admin` | `admin123` |
+| EMP-001 | 김민준 | 김 / 민준 | EMPLOYEE | `emp001` | `rlaalswns@@` |
+| EMP-002 | 김민준 | 김 / 민준 | EMPLOYEE | `emp002` | `rlaalswns@@` |
+| EMP-003 | 남궁서준 | 남궁 / 서준 | EMPLOYEE | `emp003` | `skarndtjwns@@` |
+| EMP-004 | 황보라온 | 황보 / 라온 | EMPLOYEE | `emp004` | `ghkdqhfkdhs@@` |
+| EMP-005 | 김솔 | 김 / 솔 | EMPLOYEE | `emp005` | `rlathf@@` |
+| EMP-006 | 선우진 | 선 / 우진 | EMPLOYEE | `emp006` | `tjsdnwls@@` |
+| EMP-007 | 이서연 | 이 / 서연 | EMPLOYEE | `emp007` | `dltjdus@@` |
+| EMP-008 | 박민준 | 박 / 민준 | EMPLOYEE | `emp008` | `qkralswns@@` |
+| EMP-009 | 최지우 | 최 / 지우 | EMPLOYEE | `emp009` | `chlwldn@@` |
+| EMP-010 | 정하윤 | 정 / 하윤 | EMPLOYEE | `emp010` | `wjdgkdbs@@` |
 
 직원 로그인 아이디는 사번에서 실행 중에 역추론하지 않습니다. `Employee.login_id`에
 명시적으로 저장되어 있으므로 향후 사번 형식이 바뀌어도 인증 로직은 영향을 받지 않습니다.
