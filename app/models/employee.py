@@ -21,6 +21,12 @@ class Employee(Base):
     __tablename__ = "employees"
 
     employee_number: Mapped[str] = mapped_column(String(20), primary_key=True)
+    login_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     family_name: Mapped[str] = mapped_column(String(50), nullable=False)
     given_name: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -52,4 +58,3 @@ class Employee(Base):
         nullable=True,
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-

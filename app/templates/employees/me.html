@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}내 정보 | 직원 관리 시스템{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-4">내 정보</h1>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">사번</dt>
+                    <dd class="col-sm-8">{{ employee.employee_number }}</dd>
+                    <dt class="col-sm-4">성명</dt>
+                    <dd class="col-sm-8">{{ employee.full_name }}</dd>
+                    <dt class="col-sm-4">성</dt>
+                    <dd class="col-sm-8">{{ employee.family_name }}</dd>
+                    <dt class="col-sm-4">이름</dt>
+                    <dd class="col-sm-8">{{ employee.given_name }}</dd>
+                    <dt class="col-sm-4">생년월일</dt>
+                    <dd class="col-sm-8">{{ employee.date_of_birth or "확인되지 않음" }}</dd>
+                    <dt class="col-sm-4">재직 상태</dt>
+                    <dd class="col-sm-8">{{ employee.employment_status.value }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

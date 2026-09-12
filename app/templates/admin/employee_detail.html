@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}직원 상세 | 관리자{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="mb-3">
+            <a href="/admin/employees" class="text-decoration-none">← 직원 목록</a>
+        </div>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-4">직원 상세</h1>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">사번</dt>
+                    <dd class="col-sm-8">{{ employee.employee_number }}</dd>
+                    <dt class="col-sm-4">로그인 아이디</dt>
+                    <dd class="col-sm-8">{{ employee.login_id }}</dd>
+                    <dt class="col-sm-4">성명</dt>
+                    <dd class="col-sm-8">{{ employee.full_name }}</dd>
+                    <dt class="col-sm-4">성 / 이름</dt>
+                    <dd class="col-sm-8">{{ employee.family_name }} / {{ employee.given_name }}</dd>
+                    <dt class="col-sm-4">생년월일</dt>
+                    <dd class="col-sm-8">{{ employee.date_of_birth or "확인되지 않음" }}</dd>
+                    <dt class="col-sm-4">역할</dt>
+                    <dd class="col-sm-8">{{ employee.role.value }}</dd>
+                    <dt class="col-sm-4">재직 상태</dt>
+                    <dd class="col-sm-8">
+                        {% if employee.employment_status.value == "ACTIVE" %}
+                        <span class="badge text-bg-success">ACTIVE</span>
+                        {% else %}
+                        <span class="badge text-bg-secondary">TERMINATED</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-4">퇴사 시각</dt>
+                    <dd class="col-sm-8">{{ employee.terminated_at or "-" }}</dd>
+                </dl>
+
+                <hr class="my-4">
+                {% if employee.employment_status.value == "TERMINATED" %}
+                <button class="btn btn-secondary" type="button" disabled>퇴사 처리 완료</button>
+                {% elif employee.employee_number == current_user.employee_number %}
+                <button class="btn btn-secondary" type="button" disabled>본인 계정은 퇴사 처리할 수 없습니다</button>
+                {% else %}
+                <button class="btn btn-danger" type="button"
+                        data-bs-toggle="modal" data-bs-target="#terminateModal">
+                    퇴사 처리
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if employee.employment_status.value == "ACTIVE"
+      and employee.employee_number != current_user.employee_number %}
+<div class="modal fade" id="terminateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5">퇴사 처리 확인</h2>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                {{ employee.full_name }} 직원을 퇴사 처리하시겠습니까?
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">취소</button>
+                <form method="post" action="/admin/employees/{{ employee.employee_number }}/terminate">
+                    <button class="btn btn-danger" type="submit">퇴사 처리</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

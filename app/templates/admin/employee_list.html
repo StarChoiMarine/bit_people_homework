@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}직원 목록 | 관리자{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">직원 목록</h1>
+    <div class="d-flex align-items-center gap-3">
+        <span class="badge text-bg-secondary">총 {{ employees|length }}명</span>
+        <a class="btn btn-primary btn-sm" href="/admin/employees/new">새 직원 등록</a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>사번</th>
+                    <th>성명</th>
+                    <th>생년월일</th>
+                    <th>재직 상태</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for employee in employees %}
+                <tr>
+                    <td>{{ employee.employee_number }}</td>
+                    <td>{{ employee.full_name }}</td>
+                    <td>{{ employee.date_of_birth or "확인되지 않음" }}</td>
+                    <td>
+                        {% if employee.employment_status.value == "ACTIVE" %}
+                        <span class="badge text-bg-success">ACTIVE</span>
+                        {% else %}
+                        <span class="badge text-bg-secondary">TERMINATED</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a class="btn btn-outline-primary btn-sm"
+                           href="/admin/employees/{{ employee.employee_number }}">상세</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

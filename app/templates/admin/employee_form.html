@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}새 직원 등록 | 관리자{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="mb-3">
+            <a href="/admin/employees" class="text-decoration-none">← 직원 목록</a>
+        </div>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-4">새 직원 등록</h1>
+                {% if error %}
+                <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% endif %}
+
+                <form method="post" action="/admin/employees/new">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="employee_number">사번</label>
+                            <input class="form-control" id="employee_number" name="employee_number"
+                                   value="{{ form_data.get('employee_number', '') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="login_id">로그인 아이디</label>
+                            <input class="form-control" id="login_id" name="login_id"
+                                   value="{{ form_data.get('login_id', '') }}" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="full_name">성명</label>
+                            <input class="form-control" id="full_name" name="full_name"
+                                   value="{{ form_data.get('full_name', '') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="family_name">성</label>
+                            <input class="form-control" id="family_name" name="family_name"
+                                   value="{{ form_data.get('family_name', '') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="given_name">이름</label>
+                            <input class="form-control" id="given_name" name="given_name"
+                                   value="{{ form_data.get('given_name', '') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="date_of_birth">생년월일</label>
+                            <input class="form-control" id="date_of_birth" name="date_of_birth"
+                                   type="date" value="{{ form_data.get('date_of_birth', '') }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="role">역할</label>
+                            <select class="form-select" id="role" name="role" required>
+                                {% for role in roles %}
+                                <option value="{{ role.value }}"
+                                        {% if form_data.get('role', 'EMPLOYEE') == role.value %}selected{% endif %}>
+                                    {{ role.value }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="password">초기 비밀번호</label>
+                            <input class="form-control" id="password" name="password"
+                                   type="password" minlength="8" autocomplete="new-password" required>
+                            <div class="form-text">8자 이상이며 특수문자를 포함해야 합니다.</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-end">
+                        <button class="btn btn-primary" type="submit">계정 생성</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
