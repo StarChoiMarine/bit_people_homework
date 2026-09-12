@@ -51,6 +51,15 @@ def _employee_detail_response(
         ),
         None,
     )
+    unacknowledged_background_request = next(
+        (
+            item
+            for item in background_requests
+            if item.status.value == "COMPLETED"
+            and item.id in background_result_request_ids
+        ),
+        None,
+    )
     return templates.TemplateResponse(
         request=request,
         name="admin/employee_detail.html",
@@ -61,6 +70,9 @@ def _employee_detail_response(
             "background_requests": background_requests,
             "background_result_request_ids": background_result_request_ids,
             "open_background_request": open_background_request,
+            "unacknowledged_background_request": (
+                unacknowledged_background_request
+            ),
             "background_error": background_error,
             "background_request_reason": background_request_reason,
             "current_user": admin,

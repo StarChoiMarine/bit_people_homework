@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.clients.background_check_client import (
     BackgroundCheckResponse,
@@ -129,7 +130,7 @@ class BackgroundCheckTest(unittest.TestCase):
             )
             return request.id
 
-    def test_admin_request_view_auto_acknowledge_and_sensitive_data_minimization(
+    def test_admin_request_snapshot_blocking_acknowledge_and_data_minimization(
         self,
     ) -> None:
         clock = MutableClock(datetime(2026, 9, 12, 9, 0, 0))
@@ -190,6 +191,20 @@ class BackgroundCheckTest(unittest.TestCase):
                 request_id = request.id
                 self.assertEqual(request.request_reason, "채용 전 필수 확인")
                 self.assertEqual(request.status, BackgroundCheckWorkflowStatus.REQUESTED)
+                self.assertEqual(request.submitted_full_name, "남궁서준")
+                self.assertEqual(request.submitted_family_name, "남궁")
+                self.assertEqual(request.submitted_given_name, "서준")
+                self.assertEqual(
+                    request.submitted_date_of_birth.isoformat(),
+                    "1988-07-21",
+                )
+
+                employee = db.get(Employee, "EMP-003")
+                employee.family_name = "변"
+                employee.given_name = "경후"
+                employee.full_name = "변경후"
+                employee.date_of_birth = datetime(1999, 1, 2).date()
+                db.commit()
 
             processor = BackgroundCheckProcessor(
                 fake_client,
@@ -228,6 +243,18 @@ class BackgroundCheckTest(unittest.TestCase):
                 self.assertFalse(hasattr(request, "criminal_record"))
                 self.assertFalse(hasattr(result, "credit_score"))
 
+            detail_with_result = admin_client.get("/admin/employees/EMP-003")
+            self.assertIn("남궁서준", detail_with_result.text)
+            self.assertIn("성: 남궁", detail_with_result.text)
+            self.assertIn("이름: 서준", detail_with_result.text)
+            self.assertIn("기존 결과 확인 및 정보파기 후", detail_with_result.text)
+
+            request_before_view = admin_client.post(
+                "/admin/employees/EMP-003/background-checks",
+                data={"request_reason": "미확인 상태 중복 요청"},
+            )
+            self.assertEqual(request_before_view.status_code, 409)
+
             employee_view_attempt = employee_client.post(
                 f"/admin/background-check-requests/{request_id}/view",
                 data={"access_reason": "권한 없는 열람"},
@@ -248,8 +275,8 @@ class BackgroundCheckTest(unittest.TestCase):
             self.assertEqual(view_response.status_code, 200)
             self.assertEqual(view_response.headers["cache-control"], "no-store")
             self.assertIn("CLEAR", view_response.text)
-            self.assertIn("감사 로그에 기록되었습니다", view_response.text)
-            self.assertIn("열람과 동시에 서버에서 삭제", view_response.text)
+            self.assertIn("감사 로그에 기록됩니다", view_response.text)
+            self.assertIn("확인하면 임시 결과가 즉시 삭제", view_response.text)
             self.assertIn("확인 및 정보파기", view_response.text)
             self.assertNotIn("직원 목록으로 이동", view_response.text)
             self.assertNotIn("criminalRecord", view_response.text)
@@ -266,43 +293,32 @@ class BackgroundCheckTest(unittest.TestCase):
                         AuditLog.action == AuditAction.VIEW_BACKGROUND_CHECK_RESULT
                     )
                 )
-                acknowledge_audit = db.scalar(
-                    select(AuditLog).where(
-                        AuditLog.action
-                        == AuditAction.ACKNOWLEDGE_BACKGROUND_CHECK_RESULT
-                    )
-                )
                 self.assertEqual(request_audit.details, {"request_id": str(request_id)})
                 self.assertEqual(view_audit.details["access_reason"], "인사 적합성 검토")
-                self.assertEqual(
-                    acknowledge_audit.details,
-                    {"request_id": str(request_id)},
-                )
                 audit_text = json.dumps(
-                    [
-                        request_audit.details,
-                        view_audit.details,
-                        acknowledge_audit.details,
-                    ],
+                    [request_audit.details, view_audit.details],
                     ensure_ascii=False,
                 )
                 self.assertNotIn("CLEAR", audit_text)
                 self.assertNotIn("criminal", audit_text.lower())
                 self.assertNotIn("credit", audit_text.lower())
 
-                self.assertIsNone(db.get(BackgroundCheckResult, request_id))
+                self.assertIsNotNone(db.get(BackgroundCheckResult, request_id))
                 background_request = db.get(BackgroundCheckRequest, request_id)
-                self.assertEqual(
-                    background_request.result_deletion_reason,
-                    ResultDeletionReason.ACKNOWLEDGED,
-                )
-                self.assertIsNotNone(background_request.result_deleted_at)
+                self.assertIsNone(background_request.result_deletion_reason)
+                self.assertIsNone(background_request.result_deleted_at)
 
-            detail_after_view = admin_client.get("/admin/employees/EMP-003")
-            self.assertIn("확인 완료로 삭제됨", detail_after_view.text)
+            request_after_view = admin_client.post(
+                "/admin/employees/EMP-003/background-checks",
+                data={"request_reason": "열람 후 미파기 중복 요청"},
+            )
+            self.assertEqual(request_after_view.status_code, 409)
 
-            home_after_view = admin_client.get("/", follow_redirects=False)
-            self.assertEqual(home_after_view.status_code, 303)
+            acknowledge_response = admin_client.post(
+                f"/admin/background-check-requests/{request_id}/acknowledge",
+                follow_redirects=False,
+            )
+            self.assertEqual(acknowledge_response.status_code, 303)
 
             view_after_acknowledgement = admin_client.post(
                 f"/admin/background-check-requests/{request_id}/view",
@@ -332,6 +348,23 @@ class BackgroundCheckTest(unittest.TestCase):
                     db.scalar(select(func.count()).select_from(Employee)),
                     11,
                 )
+                acknowledge_audit = db.scalar(
+                    select(AuditLog).where(
+                        AuditLog.action
+                        == AuditAction.ACKNOWLEDGE_BACKGROUND_CHECK_RESULT
+                    )
+                )
+                self.assertEqual(
+                    acknowledge_audit.details,
+                    {"request_id": str(request_id)},
+                )
+
+            request_after_acknowledgement = admin_client.post(
+                "/admin/employees/EMP-003/background-checks",
+                data={"request_reason": "확인 완료 후 재조회"},
+                follow_redirects=False,
+            )
+            self.assertEqual(request_after_acknowledgement.status_code, 303)
 
     def test_pending_ui_status_api_and_unified_attention_badge(self) -> None:
         clock = MutableClock(datetime(2026, 9, 12, 9, 30, 0))
@@ -364,6 +397,16 @@ class BackgroundCheckTest(unittest.TestCase):
             with SessionLocal() as db:
                 request_id = db.scalar(select(BackgroundCheckRequest.id))
 
+            requested_detail = admin_client.get("/admin/employees/EMP-008")
+            self.assertIn(
+                'displayedBackgroundCheckStatus = "REQUESTED"',
+                requested_detail.text,
+            )
+            self.assertIn(
+                "status.status !== displayedBackgroundCheckStatus",
+                requested_detail.text,
+            )
+
             processor = BackgroundCheckProcessor(
                 fake_client,
                 now_provider=clock.now,
@@ -376,6 +419,10 @@ class BackgroundCheckTest(unittest.TestCase):
             self.assertIn("pollBackgroundCheckStatus", detail.text)
             self.assertIn("pollBackgroundCheckStatus, 2000", detail.text)
             self.assertIn("pollBackgroundCheckStatus, 5000", detail.text)
+            self.assertIn(
+                'displayedBackgroundCheckStatus = "PENDING"',
+                detail.text,
+            )
 
             employee_status_attempt = employee_client.get(
                 f"/admin/background-check-requests/{request_id}/status"
@@ -592,6 +639,82 @@ class BackgroundCheckTest(unittest.TestCase):
                     db.scalar(select(func.count()).select_from(Employee)),
                     11,
                 )
+
+    def test_ttl_expiration_allows_a_new_request_for_active_employee(self) -> None:
+        with TestClient(app):
+            pass
+        clock = MutableClock(datetime(2026, 9, 12, 12, 0, 0))
+        request_id = self._create_request("EMP-001", clock.now())
+        fake_client = FakeBackgroundCheckClient()
+        fake_client.create_responses.append(
+            BackgroundCheckResponse(
+                status_code=201,
+                check_id="CHK-TTL-ACTIVE",
+                employee_id="EMP-001",
+                status="clear",
+            )
+        )
+        processor = BackgroundCheckProcessor(fake_client, now_provider=clock.now)
+        asyncio.run(processor.process_due_once())
+
+        with SessionLocal() as db:
+            with self.assertRaises(
+                background_check_service.BackgroundCheckAlreadyOpenError
+            ):
+                background_check_service.create_request(
+                    db=db,
+                    employee_number="EMP-001",
+                    requested_by_employee_number="ADM-001",
+                    request_reason="만료 전 중복 요청",
+                    now=clock.now(),
+                )
+
+        clock.advance(hours=24)
+        with SessionLocal() as db:
+            new_request = background_check_service.create_request(
+                db=db,
+                employee_number="EMP-001",
+                requested_by_employee_number="ADM-001",
+                request_reason="만료 후 재요청",
+                now=clock.now(),
+            )
+            self.assertNotEqual(new_request.id, request_id)
+            expired_request = db.get(BackgroundCheckRequest, request_id)
+            self.assertEqual(
+                expired_request.result_deletion_reason,
+                ResultDeletionReason.TTL_EXPIRED,
+            )
+            self.assertIsNone(db.get(BackgroundCheckResult, request_id))
+
+    def test_database_index_rejects_a_second_unresolved_request(self) -> None:
+        with TestClient(app):
+            pass
+        now = datetime(2026, 9, 12, 13, 0, 0)
+        first_request_id = self._create_request("EMP-002", now)
+
+        with SessionLocal() as db:
+            first_request = db.get(BackgroundCheckRequest, first_request_id)
+            first_request.status = BackgroundCheckWorkflowStatus.COMPLETED
+            first_request.completed_at = now
+            db.commit()
+
+        with SessionLocal() as db:
+            db.add(
+                BackgroundCheckRequest(
+                    employee_number="EMP-002",
+                    requested_by_employee_number="ADM-001",
+                    request_reason="DB 제약 우회 시도",
+                    submitted_full_name="김민준",
+                    submitted_family_name="김",
+                    submitted_given_name="민준",
+                    submitted_date_of_birth=datetime(1994, 11, 2).date(),
+                    status=BackgroundCheckWorkflowStatus.REQUESTED,
+                    requested_at=now,
+                )
+            )
+            with self.assertRaises(IntegrityError):
+                db.commit()
+            db.rollback()
 
     def test_external_client_ignores_details_and_retry_after_priority(self) -> None:
         responses = deque(

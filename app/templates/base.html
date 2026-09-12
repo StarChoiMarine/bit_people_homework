@@ -10,8 +10,11 @@
 <body class="bg-light">
     <nav class="navbar navbar-dark bg-primary shadow-sm">
         <div class="container">
+            {% block navbar_brand %}
             <a class="navbar-brand" href="/">비트컴퓨터 직원 포털</a>
+            {% endblock %}
             {% if current_user %}
+            {% block navbar_user_actions %}
             <div class="d-flex align-items-center gap-3 text-white">
                 <span>{{ current_user.full_name }} ({{ current_user.role.value }})</span>
                 <a class="btn btn-outline-light btn-sm" href="/employees/me">내 정보</a>
@@ -19,6 +22,7 @@
                     <button class="btn btn-outline-light btn-sm" type="submit">로그아웃</button>
                 </form>
             </div>
+            {% endblock %}
             {% endif %}
         </div>
     </nav>

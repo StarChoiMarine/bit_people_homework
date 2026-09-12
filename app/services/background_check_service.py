@@ -91,22 +91,27 @@ def create_request(
             "생년월일이 확인되지 않아 Background Check를 요청할 수 없습니다."
         )
     normalized_reason = _validate_reason(request_reason, "요청 사유")
+    created_at = now or _utc_now()
+    purge_expired_results(db, created_at)
     if (
-        background_check_repository.get_open_request_for_employee(
+        background_check_repository.get_blocking_request_for_employee(
             db,
             employee_number,
         )
         is not None
     ):
         raise BackgroundCheckAlreadyOpenError(
-            "이미 진행 중인 Background Check 요청이 있습니다."
+            "이미 진행 중이거나 아직 확인되지 않은 Background Check 요청이 있습니다."
         )
 
-    created_at = now or _utc_now()
     background_request = BackgroundCheckRequest(
         employee_number=employee_number,
         requested_by_employee_number=requested_by_employee_number,
         request_reason=normalized_reason,
+        submitted_full_name=f"{employee.family_name}{employee.given_name}",
+        submitted_family_name=employee.family_name,
+        submitted_given_name=employee.given_name,
+        submitted_date_of_birth=employee.date_of_birth,
         external_check_id=None,
         status=BackgroundCheckWorkflowStatus.REQUESTED,
         requested_at=created_at,
@@ -284,13 +289,7 @@ def view_result(
         purge_expired_results(db, viewed_at)
         raise BackgroundCheckResultUnavailableError("결과의 24시간 보관 기한이 만료되었습니다.")
 
-    result_value = result.result
-    result_expires_at = result.expires_at
-
     try:
-        background_check_repository.delete_result(db, result)
-        background_request.result_deleted_at = viewed_at
-        background_request.result_deletion_reason = ResultDeletionReason.ACKNOWLEDGED
         audit_repository.add(
             db,
             AuditLog(
@@ -304,16 +303,6 @@ def view_result(
                 },
             ),
         )
-        audit_repository.add(
-            db,
-            AuditLog(
-                action=AuditAction.ACKNOWLEDGE_BACKGROUND_CHECK_RESULT,
-                actor_employee_number=admin.employee_number,
-                target_employee_number=background_request.employee_number,
-                created_at=viewed_at,
-                details={"request_id": str(background_request.id)},
-            ),
-        )
         db.commit()
     except Exception:
         db.rollback()
@@ -322,8 +311,8 @@ def view_result(
     return BackgroundCheckResultView(
         request_id=background_request.id,
         employee_number=background_request.employee_number,
-        result=result_value,
-        expires_at=result_expires_at,
+        result=result.result,
+        expires_at=result.expires_at,
     )
 
 

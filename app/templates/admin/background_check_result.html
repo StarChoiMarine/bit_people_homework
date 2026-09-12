@@ -2,21 +2,24 @@
 
 {% block title %}Background Check 결과 | 관리자{% endblock %}
 
+{% block navbar_brand %}
+<span class="navbar-brand">비트컴퓨터 직원 포털</span>
+{% endblock %}
+
+{% block navbar_user_actions %}
+<span class="text-white">{{ current_user.full_name }} ({{ current_user.role.value }})</span>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-7 col-lg-6">
-        <div class="mb-3">
-            <a href="/admin/employees/{{ employee.employee_number }}" class="text-decoration-none">
-                ← 직원 상세
-            </a>
-        </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4 text-center">
                 <h1 class="h4 mb-3">Background Check 결과</h1>
                 <p class="text-secondary">{{ employee.full_name }} ({{ employee.employee_number }})</p>
                 <div class="alert alert-warning text-start" role="alert">
-                    이 결과 열람과 확인 완료는 관리자 사번, 열람 사유, 열람 시각과 함께
-                    감사 로그에 기록되었습니다.
+                    이 결과 열람은 관리자 사번, 열람 사유, 열람 시각과 함께
+                    감사 로그에 기록됩니다.
                     외부 API의 상세 검증 정보는 저장하거나 표시하지 않습니다.
                 </div>
                 {% if result_view.result.value == "CLEAR" %}
@@ -25,14 +28,12 @@
                 <div class="display-6 text-danger fw-semibold my-4">FLAGGED</div>
                 {% endif %}
                 <p class="small text-secondary mb-4">
-                    임시 결과는 열람과 동시에 서버에서 삭제되어 다시 조회할 수 없습니다.
+                    확인하면 임시 결과가 즉시 삭제되어 다시 조회할 수 없습니다.
                 </p>
-                <div class="d-flex justify-content-center">
-                    <a class="btn btn-primary"
-                       href="/admin/employees/{{ employee.employee_number }}">
-                        확인 및 정보파기
-                    </a>
-                </div>
+                <form method="post"
+                      action="/admin/background-check-requests/{{ result_view.request_id }}/acknowledge">
+                    <button class="btn btn-primary" type="submit">확인 및 정보파기</button>
+                </form>
             </div>
         </div>
     </div>

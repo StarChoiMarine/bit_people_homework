@@ -131,6 +131,10 @@
                 <button class="btn btn-secondary" type="button" disabled>
                     Background Check 진행 중
                 </button>
+                {% elif unacknowledged_background_request %}
+                <button class="btn btn-secondary" type="button" disabled>
+                    기존 결과 확인 및 정보파기 후 요청할 수 있습니다
+                </button>
                 {% else %}
                 <form method="post"
                       action="/admin/employees/{{ employee.employee_number }}/background-checks">
@@ -151,6 +155,7 @@
                         <thead>
                             <tr>
                                 <th>요청 시각</th>
+                                <th>제출 정보</th>
                                 <th>요청 사유</th>
                                 <th>상태</th>
                                 <th>결과</th>
@@ -160,6 +165,14 @@
                             {% for background_request in background_requests %}
                             <tr>
                                 <td>{{ background_request.requested_at }}</td>
+                                <td>
+                                    {{ background_request.submitted_full_name }}
+                                    <div class="small text-secondary">
+                                        성: {{ background_request.submitted_family_name }} /
+                                        이름: {{ background_request.submitted_given_name }}<br>
+                                        생년월일: {{ background_request.submitted_date_of_birth }}
+                                    </div>
+                                </td>
                                 <td>{{ background_request.request_reason }}</td>
                                 <td>
                                     {{ background_request.status.value }}
@@ -266,6 +279,8 @@
 
 {% if open_background_request %}
 <script>
+    const displayedBackgroundCheckStatus = "{{ open_background_request.status.value }}";
+
     async function pollBackgroundCheckStatus() {
         try {
             const response = await fetch(
@@ -279,7 +294,10 @@
                 throw new Error("상태 조회 실패");
             }
             const status = await response.json();
-            if (status.is_final) {
+            if (
+                status.is_final
+                || status.status !== displayedBackgroundCheckStatus
+            ) {
                 window.location.reload();
                 return;
             }

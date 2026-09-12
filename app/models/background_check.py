@@ -1,7 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, Index, Integer, String, text
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum as SqlEnum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -33,7 +42,8 @@ class BackgroundCheckRequest(Base):
             "employee_number",
             unique=True,
             sqlite_where=text(
-                "status IN ('REQUESTED', 'SUBMISSION_UNKNOWN', 'PENDING')"
+                "status IN ('REQUESTED', 'SUBMISSION_UNKNOWN', 'PENDING') "
+                "OR (status = 'COMPLETED' AND result_deleted_at IS NULL)"
             ),
         ),
     )
@@ -50,6 +60,10 @@ class BackgroundCheckRequest(Base):
         index=True,
     )
     request_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    submitted_full_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    submitted_family_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    submitted_given_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    submitted_date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
     external_check_id: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,

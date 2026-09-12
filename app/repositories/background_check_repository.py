@@ -25,13 +25,20 @@ def get_request(db: Session, request_id: int) -> BackgroundCheckRequest | None:
     return db.get(BackgroundCheckRequest, request_id)
 
 
-def get_open_request_for_employee(
+def get_blocking_request_for_employee(
     db: Session,
     employee_number: str,
 ) -> BackgroundCheckRequest | None:
     statement = select(BackgroundCheckRequest).where(
         BackgroundCheckRequest.employee_number == employee_number,
-        BackgroundCheckRequest.status.in_(OPEN_STATUSES),
+        or_(
+            BackgroundCheckRequest.status.in_(OPEN_STATUSES),
+            and_(
+                BackgroundCheckRequest.status
+                == BackgroundCheckWorkflowStatus.COMPLETED,
+                BackgroundCheckRequest.result_deleted_at.is_(None),
+            ),
+        ),
     )
     return db.scalar(statement)
 

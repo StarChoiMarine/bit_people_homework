@@ -10,6 +10,7 @@ from app.core.database import Base, SessionLocal, engine
 from app.core.schema_migrations import (
     add_employee_change_request_acknowledgement,
     upgrade_audit_log_actions,
+    upgrade_background_check_request_snapshots,
 )
 from app.core.seed import seed_accounts
 from app.routers import admin, auth, employee
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     del app
     Base.metadata.create_all(bind=engine)
     add_employee_change_request_acknowledgement(engine)
+    upgrade_background_check_request_snapshots(engine)
     upgrade_audit_log_actions(engine)
     with SessionLocal() as db:
         seed_accounts(db)

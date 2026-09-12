@@ -16,8 +16,7 @@ from app.models.background_check import (
     BackgroundCheckResultValue,
     BackgroundCheckWorkflowStatus,
 )
-from app.models.employee import EmploymentStatus
-from app.repositories import background_check_repository, employee_repository
+from app.repositories import background_check_repository
 from app.services import background_check_service
 
 
@@ -89,28 +88,13 @@ class BackgroundCheckProcessor:
                 db.commit()
                 return
 
-            employee = employee_repository.get_by_employee_number(
-                db,
-                background_request.employee_number,
-            )
-            if (
-                employee is None
-                or employee.date_of_birth is None
-                or employee.employment_status != EmploymentStatus.ACTIVE
-            ):
-                background_request.status = BackgroundCheckWorkflowStatus.FAILED
-                background_request.completed_at = now
-                background_request.last_error_code = "EMPLOYEE_NOT_ELIGIBLE"
-                db.commit()
-                return
-
             background_request.submission_started_at = now
             background_request.tracking_started_at = now
             db.commit()
-            employee_id = employee.employee_number
-            first_name = employee.given_name
-            last_name = employee.family_name
-            date_of_birth = employee.date_of_birth.isoformat()
+            employee_id = background_request.employee_number
+            first_name = background_request.submitted_given_name
+            last_name = background_request.submitted_family_name
+            date_of_birth = background_request.submitted_date_of_birth.isoformat()
 
         async with self.semaphore:
             response = await self.client.create_check(

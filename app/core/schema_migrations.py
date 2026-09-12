@@ -93,3 +93,68 @@ def add_employee_change_request_acknowledgement(engine: Engine) -> None:
                 "ALTER TABLE employee_change_requests "
                 "ADD COLUMN employee_acknowledged_at DATETIME"
             )
+
+
+def upgrade_background_check_request_snapshots(engine: Engine) -> None:
+    with engine.begin() as connection:
+        table_exists = connection.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'background_check_requests'"
+        ).scalar_one_or_none()
+        if table_exists is None:
+            return
+
+        columns = connection.exec_driver_sql(
+            "PRAGMA table_info(background_check_requests)"
+        ).mappings()
+        column_names = {column["name"] for column in columns}
+
+        snapshot_columns = {
+            "submitted_full_name": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "submitted_family_name": "VARCHAR(50) NOT NULL DEFAULT ''",
+            "submitted_given_name": "VARCHAR(50) NOT NULL DEFAULT ''",
+            "submitted_date_of_birth": (
+                "DATE NOT NULL DEFAULT '1900-01-01'"
+            ),
+        }
+        for column_name, column_definition in snapshot_columns.items():
+            if column_name not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE background_check_requests "
+                    f"ADD COLUMN {column_name} {column_definition}"
+                )
+
+        connection.exec_driver_sql(
+            "UPDATE background_check_requests "
+            "SET submitted_full_name = ("
+            "        SELECT family_name || given_name FROM employees "
+            "        WHERE employees.employee_number = "
+            "              background_check_requests.employee_number"
+            "    ), "
+            "    submitted_family_name = ("
+            "        SELECT family_name FROM employees "
+            "        WHERE employees.employee_number = "
+            "              background_check_requests.employee_number"
+            "    ), "
+            "    submitted_given_name = ("
+            "        SELECT given_name FROM employees "
+            "        WHERE employees.employee_number = "
+            "              background_check_requests.employee_number"
+            "    ), "
+            "    submitted_date_of_birth = ("
+            "        SELECT date_of_birth FROM employees "
+            "        WHERE employees.employee_number = "
+            "              background_check_requests.employee_number"
+            "    ) "
+            "WHERE submitted_full_name = ''"
+        )
+
+        connection.exec_driver_sql(
+            "DROP INDEX IF EXISTS uq_open_background_check_per_employee"
+        )
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX uq_open_background_check_per_employee "
+            "ON background_check_requests (employee_number) "
+            "WHERE status IN ('REQUESTED', 'SUBMISSION_UNKNOWN', 'PENDING') "
+            "OR (status = 'COMPLETED' AND result_deleted_at IS NULL)"
+        )
