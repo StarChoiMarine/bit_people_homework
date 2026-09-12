@@ -8,6 +8,40 @@
         <div class="mb-3">
             <a href="/admin/employees" class="text-decoration-none">← 직원 목록</a>
         </div>
+        {% if pending_request %}
+        <div class="card border-danger shadow-sm mb-4">
+            <div class="card-header bg-danger-subtle fw-semibold">대기 중인 정보 변경 요청</div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle mb-3">
+                        <thead class="table-light">
+                            <tr><th>항목</th><th>현재 정보</th><th>요청 정보</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <th>성명</th>
+                                <td>{{ pending_request.old_family_name }}{{ pending_request.old_given_name }}</td>
+                                <td>{{ pending_request.requested_family_name }}{{ pending_request.requested_given_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>생년월일</th>
+                                <td>{{ pending_request.old_date_of_birth or "확인되지 않음" }}</td>
+                                <td>{{ pending_request.requested_date_of_birth or "확인되지 않음" }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <form method="post" action="/admin/change-requests/{{ pending_request.id }}/reject">
+                        <button class="btn btn-outline-danger" type="submit">거절</button>
+                    </form>
+                    <form method="post" action="/admin/change-requests/{{ pending_request.id }}/approve">
+                        <button class="btn btn-success" type="submit">승인</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <h1 class="h4 mb-4">직원 상세</h1>
@@ -49,6 +83,28 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if change_requests %}
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-body">
+                <h2 class="h5 mb-3">정보 변경 요청 이력</h2>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>요청 시각</th><th>상태</th><th>검토자</th></tr></thead>
+                        <tbody>
+                            {% for change_request in change_requests %}
+                            <tr>
+                                <td>{{ change_request.requested_at }}</td>
+                                <td>{{ change_request.status.value }}</td>
+                                <td>{{ change_request.reviewed_by or "-" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

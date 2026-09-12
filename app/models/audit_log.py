@@ -10,6 +10,11 @@ from app.core.database import Base
 class AuditAction(str, Enum):
     CREATE_EMPLOYEE = "CREATE_EMPLOYEE"
     TERMINATE_EMPLOYEE = "TERMINATE_EMPLOYEE"
+    REQUEST_PROFILE_CHANGE = "REQUEST_PROFILE_CHANGE"
+    APPROVE_PROFILE_CHANGE = "APPROVE_PROFILE_CHANGE"
+    REJECT_PROFILE_CHANGE = "REJECT_PROFILE_CHANGE"
+    DISMISS_PROFILE_CHANGE_NOTICE = "DISMISS_PROFILE_CHANGE_NOTICE"
+    CHANGE_PASSWORD = "CHANGE_PASSWORD"
 
 
 class AuditLog(Base):
@@ -42,4 +47,3 @@ class AuditLog(Base):
         index=True,
     )
     details: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
-

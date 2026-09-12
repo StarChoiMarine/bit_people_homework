@@ -5,6 +5,10 @@ from fastapi.staticfiles import StaticFiles
 
 import app.models  # noqa: F401 - registers every SQLAlchemy model
 from app.core.database import Base, SessionLocal, engine
+from app.core.schema_migrations import (
+    add_employee_change_request_acknowledgement,
+    upgrade_audit_log_actions,
+)
 from app.core.seed import seed_accounts
 from app.routers import admin, auth, employee
 from app.services import auth_service
@@ -15,6 +19,8 @@ from app.web import templates
 async def lifespan(app: FastAPI):
     del app
     Base.metadata.create_all(bind=engine)
+    add_employee_change_request_acknowledgement(engine)
+    upgrade_audit_log_actions(engine)
     with SessionLocal() as db:
         seed_accounts(db)
     yield

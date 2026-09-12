@@ -34,3 +34,23 @@ def revoke_active_for_employee(
     )
     result = db.execute(statement)
     return result.rowcount or 0
+
+
+def revoke_other_active_for_employee(
+    db: Session,
+    employee_number: str,
+    excluded_session_id_hash: str,
+    revoked_at: datetime,
+) -> int:
+    statement = (
+        update(LoginSession)
+        .where(
+            LoginSession.employee_number == employee_number,
+            LoginSession.session_id_hash != excluded_session_id_hash,
+            LoginSession.revoked_at.is_(None),
+            LoginSession.expires_at > revoked_at,
+        )
+        .values(revoked_at=revoked_at)
+    )
+    result = db.execute(statement)
+    return result.rowcount or 0

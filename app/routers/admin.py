@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.employee import Employee, EmployeeRole
-from app.services import employee_service
+from app.services import change_request_service, employee_service
 from app.web import templates
 
 
@@ -21,10 +21,17 @@ def employee_list(
     admin: Annotated[Employee, Depends(require_admin)],
 ):
     employees = employee_service.list_employees(db)
+    pending_employee_numbers = (
+        change_request_service.get_pending_employee_numbers(db)
+    )
     return templates.TemplateResponse(
         request=request,
         name="admin/employee_list.html",
-        context={"employees": employees, "current_user": admin},
+        context={
+            "employees": employees,
+            "pending_employee_numbers": pending_employee_numbers,
+            "current_user": admin,
+        },
     )
 
 
@@ -115,10 +122,23 @@ def employee_detail(
             detail="직원을 찾을 수 없습니다.",
         )
 
+    change_requests = change_request_service.get_employee_requests(
+        db,
+        employee_number,
+    )
+    pending_request = change_request_service.get_pending_request(
+        db,
+        employee_number,
+    )
     return templates.TemplateResponse(
         request=request,
         name="admin/employee_detail.html",
-        context={"employee": employee, "current_user": admin},
+        context={
+            "employee": employee,
+            "change_requests": change_requests,
+            "pending_request": pending_request,
+            "current_user": admin,
+        },
     )
 
 
@@ -148,3 +168,57 @@ def terminate_employee(
         url=f"/admin/employees/{employee.employee_number}",
         status_code=303,
     )
+
+
+def _review_change_request(
+    db: Session,
+    request_id: int,
+    admin: Employee,
+    approve: bool,
+):
+    try:
+        if approve:
+            change_request = change_request_service.approve_change_request(
+                db,
+                request_id,
+                reviewer_employee_number=admin.employee_number,
+            )
+        else:
+            change_request = change_request_service.reject_change_request(
+                db,
+                request_id,
+                reviewer_employee_number=admin.employee_number,
+            )
+    except change_request_service.ChangeRequestError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    if change_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="정보 변경 요청을 찾을 수 없습니다.",
+        )
+    return RedirectResponse(
+        url=f"/admin/employees/{change_request.employee_number}",
+        status_code=303,
+    )
+
+
+@router.post("/change-requests/{request_id}/approve")
+def approve_change_request(
+    request_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    return _review_change_request(db, request_id, admin, approve=True)
+
+
+@router.post("/change-requests/{request_id}/reject")
+def reject_change_request(
+    request_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    return _review_change_request(db, request_id, admin, approve=False)

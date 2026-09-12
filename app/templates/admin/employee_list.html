@@ -37,8 +37,17 @@
                         {% endif %}
                     </td>
                     <td class="text-end">
-                        <a class="btn btn-outline-primary btn-sm"
-                           href="/admin/employees/{{ employee.employee_number }}">상세</a>
+                        <span class="position-relative d-inline-block">
+                            <a class="btn btn-outline-primary btn-sm"
+                               href="/admin/employees/{{ employee.employee_number }}">상세</a>
+                            {% if employee.employee_number in pending_employee_numbers %}
+                            <span class="position-absolute top-0 start-100 translate-middle
+                                         badge rounded-pill text-bg-danger">
+                                요청
+                                <span class="visually-hidden">대기 중인 정보 변경 요청</span>
+                            </span>
+                            {% endif %}
+                        </span>
                     </td>
                 </tr>
                 {% endfor %}

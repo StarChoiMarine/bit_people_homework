@@ -38,3 +38,13 @@ def require_admin(
         )
     return current_employee
 
+
+def require_employee(
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
+) -> Employee:
+    if current_employee.role != EmployeeRole.EMPLOYEE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="직원 계정만 사용할 수 있습니다.",
+        )
+    return current_employee

@@ -8,6 +8,19 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <h1 class="h4 mb-4">내 정보</h1>
+                {% if rejected_request_notice %}
+                <div class="alert alert-danger d-flex justify-content-between align-items-center gap-3" role="alert">
+                    <span>최근 정보수정 요청이 거절되었습니다. 관리자에게 문의하세요.</span>
+                    <form method="post" action="/employees/me/change-request-notice/dismiss">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">확인</button>
+                    </form>
+                </div>
+                {% endif %}
+                {% if pending_request %}
+                <div class="alert alert-warning" role="alert">
+                    정보 변경 요청이 관리자 검토 대기 중입니다.
+                </div>
+                {% endif %}
                 <dl class="row mb-0">
                     <dt class="col-sm-4">사번</dt>
                     <dd class="col-sm-8">{{ employee.employee_number }}</dd>
@@ -22,9 +35,23 @@
                     <dt class="col-sm-4">재직 상태</dt>
                     <dd class="col-sm-8">{{ employee.employment_status.value }}</dd>
                 </dl>
+                <hr class="my-4">
+                <div class="d-flex gap-2">
+                {% if current_user.role.value == "EMPLOYEE" %}
+                    {% if pending_request %}
+                    <button class="btn btn-secondary" type="button" disabled>변경 요청 검토 대기 중</button>
+                    {% else %}
+                <a class="btn btn-primary" href="/employees/me/edit/verify-password">
+                    내 정보 수정
+                </a>
+                    {% endif %}
+                {% endif %}
+                <a class="btn btn-outline-primary" href="/employees/me/password">
+                    비밀번호 변경
+                </a>
+                </div>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
-
