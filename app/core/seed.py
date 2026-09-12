@@ -1,4 +1,7 @@
+import json
+import os
 from datetime import date
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -16,7 +19,6 @@ SEED_ACCOUNTS = [
         "given_name": "관리자",
         "date_of_birth": None,
         "role": EmployeeRole.ADMIN,
-        "password": "admin123",
     },
     {
         "employee_number": "EMP-001",
@@ -26,7 +28,6 @@ SEED_ACCOUNTS = [
         "given_name": "민준",
         "date_of_birth": "1990-03-15",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "rlaalswns@@",
     },
     {
         "employee_number": "EMP-002",
@@ -36,7 +37,6 @@ SEED_ACCOUNTS = [
         "given_name": "민준",
         "date_of_birth": "1994-11-02",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "rlaalswns@@",
     },
     {
         "employee_number": "EMP-003",
@@ -46,7 +46,6 @@ SEED_ACCOUNTS = [
         "given_name": "서준",
         "date_of_birth": "1988-07-21",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "skarndtjwns@@",
     },
     {
         "employee_number": "EMP-004",
@@ -56,7 +55,6 @@ SEED_ACCOUNTS = [
         "given_name": "라온",
         "date_of_birth": "1995-02-09",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "ghkdqhfkdhs@@",
     },
     {
         "employee_number": "EMP-005",
@@ -66,7 +64,6 @@ SEED_ACCOUNTS = [
         "given_name": "솔",
         "date_of_birth": "1992-12-30",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "rlathf@@",
     },
     {
         "employee_number": "EMP-006",
@@ -76,7 +73,6 @@ SEED_ACCOUNTS = [
         "given_name": "우진",
         "date_of_birth": "1991-05-05",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "tjsdnwls@@",
     },
     {
         "employee_number": "EMP-007",
@@ -86,7 +82,6 @@ SEED_ACCOUNTS = [
         "given_name": "서연",
         "date_of_birth": None,
         "role": EmployeeRole.EMPLOYEE,
-        "password": "dltjdus@@",
     },
     {
         "employee_number": "EMP-008",
@@ -96,7 +91,6 @@ SEED_ACCOUNTS = [
         "given_name": "민준",
         "date_of_birth": "1993-08-17",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "qkralswns@@",
     },
     {
         "employee_number": "EMP-009",
@@ -106,7 +100,6 @@ SEED_ACCOUNTS = [
         "given_name": "지우",
         "date_of_birth": "1996-04-03",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "chlwldn@@",
     },
     {
         "employee_number": "EMP-010",
@@ -116,12 +109,46 @@ SEED_ACCOUNTS = [
         "given_name": "하윤",
         "date_of_birth": "1989-10-11",
         "role": EmployeeRole.EMPLOYEE,
-        "password": "wjdgkdbs@@",
     },
 ]
 
 
+def load_seed_passwords() -> dict[str, str]:
+    credentials_file = os.getenv("SEED_CREDENTIALS_FILE")
+    if not credentials_file:
+        raise RuntimeError("SEED_CREDENTIALS_FILE 환경 변수를 설정해 주세요.")
+
+    path = Path(credentials_file)
+    try:
+        credentials = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError("시드 자격증명 파일을 읽을 수 없습니다.") from error
+
+    if not isinstance(credentials, dict):
+        raise RuntimeError("시드 자격증명 파일은 JSON 객체여야 합니다.")
+
+    passwords: dict[str, str] = {}
+    for account in SEED_ACCOUNTS:
+        login_id = account["login_id"]
+        password = credentials.get(login_id)
+        password_is_valid = (
+            isinstance(password, str)
+            and len(password) >= 16
+            and any(character.islower() for character in password)
+            and any(character.isupper() for character in password)
+            and any(character.isdigit() for character in password)
+            and any(not character.isalnum() for character in password)
+        )
+        if not password_is_valid:
+            raise RuntimeError(
+                f"{login_id} 계정의 비밀번호 정책을 확인해 주세요."
+            )
+        passwords[login_id] = password
+    return passwords
+
+
 def seed_accounts(db: Session) -> None:
+    seed_passwords = load_seed_passwords()
     for account in SEED_ACCOUNTS:
         employee_number = account["employee_number"]
         if get_by_employee_number(db, employee_number) is not None:
@@ -140,7 +167,7 @@ def seed_accounts(db: Session) -> None:
             role=account["role"],
             employment_status=EmploymentStatus.ACTIVE,
             terminated_at=None,
-            password_hash=hash_password(account["password"]),
+            password_hash=hash_password(seed_passwords[account["login_id"]]),
         )
         db.add(employee)
 

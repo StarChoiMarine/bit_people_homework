@@ -101,6 +101,9 @@ Python 3.12 이상을 권장합니다.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
+python -m app.core.generate_seed_credentials \
+  --output .secrets/seed_credentials.json
+export SEED_CREDENTIALS_FILE=.secrets/seed_credentials.json
 uvicorn app.main:app --workers 1 --host 0.0.0.0 --port 8000
 ```
 
@@ -117,6 +120,8 @@ docker build -t bit-people-portal .
 docker run --rm \
   -p 8000:8000 \
   -v bit-people-data:/app/data \
+  -v "$PWD/.secrets/seed_credentials.json:/run/secrets/seed_credentials.json:ro" \
+  -e SEED_CREDENTIALS_FILE=/run/secrets/seed_credentials.json \
   bit-people-portal
 ```
 
@@ -133,6 +138,7 @@ DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테�
 | `BACKGROUND_CHECK_API_URL` | Swagger의 운영 API 주소 | Background Check 외부 API 기준 URL |
 | `BACKGROUND_CHECK_POLLER_ENABLED` | `true` | `false`이면 애플리케이션 내부 폴러를 실행하지 않음 |
 | `COOKIE_SECURE` | `false` | HTTPS 운영 환경에서는 반드시 `true`로 설정 |
+| `SEED_CREDENTIALS_FILE` | 없음, 필수 | Git 외부에 보관하는 시드 비밀번호 JSON 파일 경로 |
 
 > `BACKGROUND_CHECK_API_URL`의 기본값은 첨부된 Swagger의 실제 외부 서버입니다.
 > 기능을 시험하며 Background Check 버튼을 누르면 외부 요청이 발생하므로 허가된 테스트
@@ -164,6 +170,30 @@ DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테�
 새 계정을 만들거나 비밀번호를 변경할 때는 8자 이상이며 특수문자를 포함해야 합니다.
 초기 비밀번호는 평가용이므로 실제 운영 배포 전 모두 교체하고, 별도의 안전한 전달 및 최초
 로그인 변경 정책을 적용해야 합니다.
+
+자격증명 파일은 다음 형태이며 `.secrets/`는 Git에서 제외되어 있습니다.
+
+```json
+{
+  "admin": "별도로 전달하는 비밀번호",
+  "emp001": "별도로 전달하는 비밀번호"
+}
+```
+
+실제 파일에는 `admin`, `emp001`부터 `emp010`까지 11개 로그인 아이디가 모두 필요하며 각
+비밀번호는 16자 이상이며 영문 대·소문자, 숫자, 특수문자를 포함해야 합니다. 생성 명령은
+이 정책을 만족하는 24자리 무작위 비밀번호와 권한 `600`인 파일을 만들며, 기존 파일이
+있으면 덮어쓰지 않고 중단합니다.
+
+이미 생성된 DB의 비밀번호를 새 자격증명으로 일괄 교체하려면 DB와 비밀 파일을 연결한
+환경에서 다음 일회성 명령을 실행합니다.
+
+```bash
+python -m app.core.rotate_seed_passwords
+```
+
+이 명령은 11개 계정의 비밀번호를 다시 해싱하고 모든 활성 세션을 폐기하며, 각 변경을
+감사로그에 기록한 뒤 하나의 트랜잭션으로 커밋합니다.
 
 ## 인증과 권한 처리
 

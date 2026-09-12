@@ -2,10 +2,11 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
+.secrets/
+seed_credentials.json
 .pytest_cache/
 
 # SQLite runtime files
 data/*.db
 data/*.db-shm
 data/*.db-wal
-

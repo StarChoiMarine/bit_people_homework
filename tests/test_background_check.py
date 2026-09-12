@@ -147,11 +147,11 @@ class BackgroundCheckTest(unittest.TestCase):
         with TestClient(app) as admin_client, TestClient(app) as employee_client:
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
             employee_client.post(
                 "/login",
-                data={"login_id": "emp003", "password": "skarndtjwns@@"},
+                data={"login_id": "emp003", "password": "TestEmployee003-Password!"},
             )
 
             detail = admin_client.get("/admin/employees/EMP-003")
@@ -381,11 +381,11 @@ class BackgroundCheckTest(unittest.TestCase):
         with TestClient(app) as admin_client, TestClient(app) as employee_client:
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
             employee_client.post(
                 "/login",
-                data={"login_id": "emp008", "password": "qkralswns@@"},
+                data={"login_id": "emp008", "password": "TestEmployee008-Password!"},
             )
             create_response = admin_client.post(
                 "/admin/employees/EMP-008/background-checks",

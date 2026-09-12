@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 
 from app.core.database import Base, SessionLocal, engine
 from app.core.passwords import verify_password
+from app.core.rotate_seed_passwords import rotate_seed_passwords
 from app.main import app
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.employee import Employee, EmploymentStatus
@@ -27,7 +28,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as employee_client:
             login_response = employee_client.post(
                 "/login",
-                data={"login_id": "emp001", "password": "rlaalswns@@"},
+                data={"login_id": "emp001", "password": "TestEmployee001-Password!"},
                 follow_redirects=False,
             )
             self.assertEqual(login_response.status_code, 303)
@@ -60,7 +61,7 @@ class AuthenticationTest(unittest.TestCase):
 
                 employee = db.get(Employee, "EMP-001")
                 self.assertEqual(employee.login_id, "emp001")
-                self.assertNotEqual(employee.password_hash, "rlaalswns@@")
+                self.assertNotEqual(employee.password_hash, "TestEmployee001-Password!")
 
                 compound_name = db.get(Employee, "EMP-003")
                 self.assertEqual(compound_name.family_name, "남궁")
@@ -76,7 +77,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as admin_client:
             admin_login = admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
                 follow_redirects=False,
             )
             self.assertEqual(admin_login.status_code, 303)
@@ -94,7 +95,7 @@ class AuthenticationTest(unittest.TestCase):
             for client in (first_session_client, second_session_client):
                 client.post(
                     "/login",
-                    data={"login_id": "emp003", "password": "skarndtjwns@@"},
+                    data={"login_id": "emp003", "password": "TestEmployee003-Password!"},
                 )
 
             session_ids = [
@@ -133,11 +134,63 @@ class AuthenticationTest(unittest.TestCase):
                     login_session = db.get(LoginSession, session_id_hash)
                     self.assertIsNotNone(login_session.revoked_at)
 
+    def test_seed_credential_rotation_rehashes_all_accounts_and_revokes_sessions(
+        self,
+    ) -> None:
+        with TestClient(app) as admin_client, TestClient(app) as employee_client:
+            admin_client.post(
+                "/login",
+                data={
+                    "login_id": "admin",
+                    "password": "TestAdmin-Password-2026!",
+                },
+            )
+            employee_client.post(
+                "/login",
+                data={
+                    "login_id": "emp001",
+                    "password": "TestEmployee001-Password!",
+                },
+            )
+
+            employee_count, revoked_session_count = rotate_seed_passwords()
+            self.assertEqual(employee_count, 11)
+            self.assertEqual(revoked_session_count, 2)
+            self.assertEqual(admin_client.get("/admin/employees").status_code, 401)
+            self.assertEqual(employee_client.get("/employees/me").status_code, 401)
+
+            with SessionLocal() as db:
+                rotation_audits = list(
+                    db.scalars(
+                        select(AuditLog).where(
+                            AuditLog.action == AuditAction.UPDATE_EMPLOYEE,
+                            AuditLog.details["reason"].as_string()
+                            == "CREDENTIAL_EXPOSURE_ROTATION",
+                        )
+                    )
+                )
+                self.assertEqual(len(rotation_audits), 11)
+                self.assertNotIn(
+                    "TestAdmin-Password-2026!",
+                    str([audit.details for audit in rotation_audits]),
+                )
+
+        with TestClient(app) as login_client:
+            login_response = login_client.post(
+                "/login",
+                data={
+                    "login_id": "admin",
+                    "password": "TestAdmin-Password-2026!",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(login_response.status_code, 303)
+
     def test_employee_creation_and_duplicate_validation(self) -> None:
         with TestClient(app) as admin_client:
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
             self.assertEqual(admin_client.get("/admin/employees/new").status_code, 200)
             new_employee_form = admin_client.get("/admin/employees/new")
@@ -228,7 +281,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as employee_client, TestClient(app) as admin_client:
             employee_login = employee_client.post(
                 "/login",
-                data={"login_id": "emp004", "password": "ghkdqhfkdhs@@"},
+                data={"login_id": "emp004", "password": "TestEmployee004-Password!"},
             )
             self.assertEqual(employee_login.status_code, 200)
             employee_session_id = employee_client.cookies.get("session_id")
@@ -242,7 +295,7 @@ class AuthenticationTest(unittest.TestCase):
 
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
 
             self_termination_response = admin_client.post(
@@ -370,7 +423,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as terminated_login_client:
             login_response = terminated_login_client.post(
                 "/login",
-                data={"login_id": "emp004", "password": "ghkdqhfkdhs@@"},
+                data={"login_id": "emp004", "password": "TestEmployee004-Password!"},
             )
             self.assertEqual(login_response.status_code, 401)
             self.assertIn(
@@ -382,11 +435,11 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as employee_client, TestClient(app) as admin_client:
             employee_client.post(
                 "/login",
-                data={"login_id": "emp006", "password": "tjsdnwls@@"},
+                data={"login_id": "emp006", "password": "TestEmployee006-Password!"},
             )
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
 
             self.assertEqual(
@@ -421,7 +474,7 @@ class AuthenticationTest(unittest.TestCase):
 
             verify_response = admin_client.post(
                 "/admin/employees/EMP-006/edit/verify-password",
-                data={"password": "admin123"},
+                data={"password": "TestAdmin-Password-2026!"},
                 follow_redirects=False,
             )
             self.assertEqual(verify_response.status_code, 303)
@@ -517,7 +570,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as updated_employee_client:
             old_login_response = updated_employee_client.post(
                 "/login",
-                data={"login_id": "emp006", "password": "tjsdnwls@@"},
+                data={"login_id": "emp006", "password": "TestEmployee006-Password!"},
             )
             self.assertEqual(old_login_response.status_code, 401)
             new_login_response = updated_employee_client.post(
@@ -538,15 +591,15 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as employee_client, TestClient(app) as admin_client:
             employee_client.post(
                 "/login",
-                data={"login_id": "emp006", "password": "tjsdnwls@@"},
+                data={"login_id": "emp006", "password": "TestEmployee006-Password!"},
             )
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
             employee_client.post(
                 "/employees/me/edit/verify-password",
-                data={"password": "tjsdnwls@@"},
+                data={"password": "TestEmployee006-Password!"},
             )
             request_response = employee_client.post(
                 "/employees/me/edit",
@@ -572,11 +625,11 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as employee_client, TestClient(app) as admin_client:
             employee_client.post(
                 "/login",
-                data={"login_id": "emp003", "password": "skarndtjwns@@"},
+                data={"login_id": "emp003", "password": "TestEmployee003-Password!"},
             )
             admin_client.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
 
             profile_response = employee_client.get("/employees/me")
@@ -601,7 +654,7 @@ class AuthenticationTest(unittest.TestCase):
 
             verify_response = employee_client.post(
                 "/employees/me/edit/verify-password",
-                data={"password": "skarndtjwns@@"},
+                data={"password": "TestEmployee003-Password!"},
                 follow_redirects=False,
             )
             self.assertEqual(verify_response.status_code, 303)
@@ -744,7 +797,7 @@ class AuthenticationTest(unittest.TestCase):
 
             employee_client.post(
                 "/employees/me/edit/verify-password",
-                data={"password": "skarndtjwns@@"},
+                data={"password": "TestEmployee003-Password!"},
             )
             employee_client.post(
                 "/employees/me/edit",
@@ -858,7 +911,7 @@ class AuthenticationTest(unittest.TestCase):
             for client in (current_client, other_client):
                 client.post(
                     "/login",
-                    data={"login_id": "emp005", "password": "rlathf@@"},
+                    data={"login_id": "emp005", "password": "TestEmployee005-Password!"},
                 )
 
             password_form = current_client.get("/employees/me/password")
@@ -879,7 +932,7 @@ class AuthenticationTest(unittest.TestCase):
             mismatched_password = current_client.post(
                 "/employees/me/password",
                 data={
-                    "current_password": "rlathf@@",
+                    "current_password": "TestEmployee005-Password!",
                     "new_password": "changed@@123",
                     "new_password_confirmation": "different@@123",
                 },
@@ -890,7 +943,7 @@ class AuthenticationTest(unittest.TestCase):
             change_response = current_client.post(
                 "/employees/me/password",
                 data={
-                    "current_password": "rlathf@@",
+                    "current_password": "TestEmployee005-Password!",
                     "new_password": "changed@@123",
                     "new_password_confirmation": "changed@@123",
                 },
@@ -914,7 +967,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as login_client:
             old_password_login = login_client.post(
                 "/login",
-                data={"login_id": "emp005", "password": "rlathf@@"},
+                data={"login_id": "emp005", "password": "TestEmployee005-Password!"},
             )
             self.assertEqual(old_password_login.status_code, 401)
 
@@ -929,7 +982,7 @@ class AuthenticationTest(unittest.TestCase):
         with TestClient(app) as requesting_admin, TestClient(app) as reviewing_admin:
             requesting_admin.post(
                 "/login",
-                data={"login_id": "admin", "password": "admin123"},
+                data={"login_id": "admin", "password": "TestAdmin-Password-2026!"},
             )
 
             create_reviewer_response = requesting_admin.post(
@@ -954,7 +1007,7 @@ class AuthenticationTest(unittest.TestCase):
 
             verify_response = requesting_admin.post(
                 "/employees/me/edit/verify-password",
-                data={"password": "admin123"},
+                data={"password": "TestAdmin-Password-2026!"},
                 follow_redirects=False,
             )
             self.assertEqual(verify_response.status_code, 303)
@@ -1019,7 +1072,7 @@ class AuthenticationTest(unittest.TestCase):
             password_response = requesting_admin.post(
                 "/employees/me/password",
                 data={
-                    "current_password": "admin123",
+                    "current_password": "TestAdmin-Password-2026!",
                     "new_password": "new-admin@@",
                     "new_password_confirmation": "new-admin@@",
                 },
