@@ -1,3 +1,5 @@
+import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,6 +14,7 @@ from app.core.schema_migrations import (
 from app.core.seed import seed_accounts
 from app.routers import admin, auth, employee
 from app.services import auth_service
+from app.services.background_check_processor import run_background_check_poller
 from app.web import templates
 
 
@@ -23,7 +26,18 @@ async def lifespan(app: FastAPI):
     upgrade_audit_log_actions(engine)
     with SessionLocal() as db:
         seed_accounts(db)
-    yield
+
+    poller_task = None
+    stop_event = asyncio.Event()
+    if os.getenv("BACKGROUND_CHECK_POLLER_ENABLED", "true").lower() == "true":
+        poller_task = asyncio.create_task(run_background_check_poller(stop_event))
+
+    try:
+        yield
+    finally:
+        if poller_task is not None:
+            stop_event.set()
+            await poller_task
 
 
 app = FastAPI(

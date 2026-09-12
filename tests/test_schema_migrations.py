@@ -56,11 +56,18 @@ def test_legacy_audit_actions_are_upgraded_without_data_loss(tmp_path) -> None:
             "VALUES ('DISMISS_PROFILE_CHANGE_NOTICE', 'EMP-001', "
             "'EMP-001', '2026-09-12')"
         ).rowcount
+        background_action_count = connection.exec_driver_sql(
+            "INSERT INTO audit_logs "
+            "(action, actor_employee_number, target_employee_number, created_at) "
+            "VALUES ('ACKNOWLEDGE_BACKGROUND_CHECK_RESULT', 'ADM-001', "
+            "'EMP-001', '2026-09-12')"
+        ).rowcount
 
     migration_engine.dispose()
     assert existing_action == "CREATE_EMPLOYEE"
     assert self_service_action_count == 1
     assert dismiss_action_count == 1
+    assert background_action_count == 1
 
 
 def test_acknowledgement_column_is_added_to_existing_change_request_table(

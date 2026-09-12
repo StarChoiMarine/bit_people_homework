@@ -20,6 +20,7 @@
                     <th>성명</th>
                     <th>생년월일</th>
                     <th>재직 상태</th>
+                    <th>확인 필요</th>
                     <th></th>
                 </tr>
             </thead>
@@ -36,18 +37,16 @@
                         <span class="badge text-bg-secondary">TERMINATED</span>
                         {% endif %}
                     </td>
+                    <td>
+                        {% if employee.employee_number in attention_employee_numbers %}
+                        <span class="badge text-bg-danger">확인 필요</span>
+                        {% else %}
+                        <span class="text-secondary">-</span>
+                        {% endif %}
+                    </td>
                     <td class="text-end">
-                        <span class="position-relative d-inline-block">
-                            <a class="btn btn-outline-primary btn-sm"
-                               href="/admin/employees/{{ employee.employee_number }}">상세</a>
-                            {% if employee.employee_number in pending_employee_numbers %}
-                            <span class="position-absolute top-0 start-100 translate-middle
-                                         badge rounded-pill text-bg-danger">
-                                요청
-                                <span class="visually-hidden">대기 중인 정보 변경 요청</span>
-                            </span>
-                            {% endif %}
-                        </span>
+                        <a class="btn btn-outline-primary btn-sm"
+                           href="/admin/employees/{{ employee.employee_number }}">상세</a>
                     </td>
                 </tr>
                 {% endfor %}

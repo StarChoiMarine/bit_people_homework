@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Background Check 결과 | 관리자{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-6">
+        <div class="mb-3">
+            <a href="/admin/employees/{{ employee.employee_number }}" class="text-decoration-none">
+                ← 직원 상세
+            </a>
+        </div>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 text-center">
+                <h1 class="h4 mb-3">Background Check 결과</h1>
+                <p class="text-secondary">{{ employee.full_name }} ({{ employee.employee_number }})</p>
+                <div class="alert alert-warning text-start" role="alert">
+                    이 결과 열람은 관리자 사번, 열람 사유, 열람 시각과 함께 감사 로그에 기록되었습니다.
+                    외부 API의 상세 검증 정보는 저장하거나 표시하지 않습니다.
+                </div>
+                {% if result_view.result.value == "CLEAR" %}
+                <div class="display-6 text-success fw-semibold my-4">CLEAR</div>
+                {% else %}
+                <div class="display-6 text-danger fw-semibold my-4">FLAGGED</div>
+                {% endif %}
+                <p class="small text-secondary mb-4">
+                    미확인 상태로도 {{ result_view.expires_at }} 이후 자동 삭제됩니다.
+                </p>
+                <form method="post"
+                      action="/admin/background-check-requests/{{ result_view.request_id }}/acknowledge">
+                    <button class="btn btn-primary" type="submit">확인 완료 및 결과 삭제</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

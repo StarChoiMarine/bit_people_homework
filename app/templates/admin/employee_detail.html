@@ -92,6 +92,115 @@
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-body p-4">
+                <h2 class="h5 mb-3">Background Check</h2>
+                <div class="alert alert-warning" role="alert">
+                    Background Check 요청과 결과 열람은 관리자 사번, 사유, 시각과 함께
+                    감사 목적으로 기록됩니다. 범죄기록 등 민감한 상세 내용을 사유에 입력하지 마세요.
+                </div>
+                {% if background_error %}
+                <div class="alert alert-danger" role="alert">{{ background_error }}</div>
+                {% endif %}
+
+                {% if employee.employment_status.value != "ACTIVE" %}
+                <button class="btn btn-secondary" type="button" disabled>
+                    퇴사한 직원은 요청할 수 없습니다
+                </button>
+                {% elif not employee.date_of_birth %}
+                <button class="btn btn-secondary" type="button" disabled>
+                    생년월일 확인 후 요청할 수 있습니다
+                </button>
+                {% elif open_background_request %}
+                <button class="btn btn-secondary" type="button" disabled>
+                    Background Check 진행 중
+                </button>
+                {% else %}
+                <form method="post"
+                      action="/admin/employees/{{ employee.employee_number }}/background-checks">
+                    <div class="mb-3">
+                        <label class="form-label" for="request_reason">요청 사유</label>
+                        <textarea class="form-control" id="request_reason" name="request_reason"
+                                  maxlength="500" rows="2" required>{{ background_request_reason }}</textarea>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Background Check 요청</button>
+                </form>
+                {% endif %}
+
+                {% if background_requests %}
+                <hr class="my-4">
+                <h3 class="h6 mb-3">요청 이력</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>요청 시각</th>
+                                <th>요청 사유</th>
+                                <th>상태</th>
+                                <th>결과</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for background_request in background_requests %}
+                            <tr>
+                                <td>{{ background_request.requested_at }}</td>
+                                <td>{{ background_request.request_reason }}</td>
+                                <td>
+                                    {{ background_request.status.value }}
+                                    {% if background_request.automatic_polling_stopped_at %}
+                                    <div class="small text-danger">조회가 지연되고 있습니다.</div>
+                                    <form method="post" class="mt-2"
+                                          action="/admin/background-check-requests/{{ background_request.id }}/refresh">
+                                        <button class="btn btn-outline-secondary btn-sm" type="submit">
+                                            안전한 GET 재확인
+                                        </button>
+                                    </form>
+                                    {% elif background_request.status.value == "SUBMISSION_UNKNOWN" %}
+                                    <div class="small text-warning">외부 접수 여부 확인 중</div>
+                                    {% elif background_request.status.value == "PENDING" %}
+                                    <div class="small text-secondary">
+                                        평균 약 3분, 대부분 5분 이내에 결과가 도착합니다.
+                                        외부 API 사정에 따라 더 지연될 수 있습니다.
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td style="min-width: 240px">
+                                    {% if background_request.id in background_result_request_ids %}
+                                    <form method="post"
+                                          action="/admin/background-check-requests/{{ background_request.id }}/view">
+                                        <label class="form-label small" for="access_reason_{{ background_request.id }}">
+                                            열람 사유
+                                        </label>
+                                        <input class="form-control form-control-sm mb-2"
+                                               id="access_reason_{{ background_request.id }}"
+                                               name="access_reason" maxlength="500" required>
+                                        <button class="btn btn-outline-primary btn-sm" type="submit">
+                                            기록을 남기고 결과 열람
+                                        </button>
+                                    </form>
+                                    {% elif background_request.result_deletion_reason %}
+                                    <span class="text-secondary">
+                                        {% if background_request.result_deletion_reason.value == "ACKNOWLEDGED" %}
+                                        확인 완료로 삭제됨
+                                        {% else %}
+                                        24시간 만료로 삭제됨
+                                        {% endif %}
+                                    </span>
+                                    {% elif background_request.status.value == "COMPLETED" %}
+                                    <span class="text-secondary">결과 없음</span>
+                                    {% else %}
+                                    <span class="text-secondary">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         {% if change_requests %}
         <div class="card border-0 shadow-sm mt-4">
             <div class="card-body">
@@ -137,5 +246,34 @@
         </div>
     </div>
 </div>
+{% endif %}
+
+{% if open_background_request %}
+<script>
+    async function pollBackgroundCheckStatus() {
+        try {
+            const response = await fetch(
+                "/admin/background-check-requests/{{ open_background_request.id }}/status",
+                {cache: "no-store", headers: {"Accept": "application/json"}}
+            );
+            if ([401, 403, 404].includes(response.status)) {
+                return;
+            }
+            if (!response.ok) {
+                throw new Error("상태 조회 실패");
+            }
+            const status = await response.json();
+            if (status.is_final) {
+                window.location.reload();
+                return;
+            }
+        } catch (error) {
+            // 일시적인 네트워크 오류는 다음 폴링에서 다시 확인한다.
+        }
+        window.setTimeout(pollBackgroundCheckStatus, 5000);
+    }
+
+    window.setTimeout(pollBackgroundCheckStatus, 2000);
+</script>
 {% endif %}
 {% endblock %}

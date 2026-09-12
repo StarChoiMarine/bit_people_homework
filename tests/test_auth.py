@@ -498,7 +498,18 @@ class AuthenticationTest(unittest.TestCase):
                 employee_client.get("/employees/me").text,
             )
             employee_list_response = admin_client.get("/admin/employees")
-            self.assertIn("대기 중인 정보 변경 요청", employee_list_response.text)
+            employee_row_start = employee_list_response.text.index(
+                "<td>EMP-003</td>"
+            )
+            employee_row_end = employee_list_response.text.index(
+                "</tr>",
+                employee_row_start,
+            )
+            employee_row = employee_list_response.text[
+                employee_row_start:employee_row_end
+            ]
+            self.assertIn("확인 필요", employee_row)
+            self.assertNotIn("position-absolute", employee_row)
 
             detail_response = admin_client.get("/admin/employees/EMP-003")
             self.assertIn("대기 중인 정보 변경 요청", detail_response.text)

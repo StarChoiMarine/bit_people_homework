@@ -9,6 +9,9 @@ AUDIT_ACTIONS = (
     "REJECT_PROFILE_CHANGE",
     "DISMISS_PROFILE_CHANGE_NOTICE",
     "CHANGE_PASSWORD",
+    "REQUEST_BACKGROUND_CHECK",
+    "VIEW_BACKGROUND_CHECK_RESULT",
+    "ACKNOWLEDGE_BACKGROUND_CHECK_RESULT",
 )
 
 
@@ -32,7 +35,7 @@ def upgrade_audit_log_actions(engine: Engine) -> None:
                     f"""
                     CREATE TABLE audit_logs_new (
                         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                        action VARCHAR(30) NOT NULL,
+                        action VARCHAR(40) NOT NULL,
                         actor_employee_number VARCHAR(20) NOT NULL,
                         target_employee_number VARCHAR(20) NOT NULL,
                         created_at DATETIME NOT NULL,

@@ -7,6 +7,7 @@ TEST_DATABASE_DIRECTORY = tempfile.TemporaryDirectory()
 os.environ["DATABASE_PATH"] = str(
     Path(TEST_DATABASE_DIRECTORY.name) / "employee_portal_test.db"
 )
+os.environ["BACKGROUND_CHECK_POLLER_ENABLED"] = "false"
 
 
 def pytest_sessionfinish(session, exitstatus) -> None:
@@ -16,4 +17,3 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
     engine.dispose()
     TEST_DATABASE_DIRECTORY.cleanup()
-

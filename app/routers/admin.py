@@ -1,17 +1,71 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.employee import Employee, EmployeeRole
-from app.services import change_request_service, employee_service
+from app.services import (
+    background_check_service,
+    change_request_service,
+    employee_service,
+)
 from app.web import templates
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _employee_detail_response(
+    request: Request,
+    db: Session,
+    admin: Employee,
+    employee: Employee,
+    background_error: str | None = None,
+    background_request_reason: str = "",
+    status_code: int = status.HTTP_200_OK,
+):
+    change_requests = change_request_service.get_employee_requests(
+        db,
+        employee.employee_number,
+    )
+    pending_request = change_request_service.get_pending_request(
+        db,
+        employee.employee_number,
+    )
+    background_requests, background_result_request_ids = (
+        background_check_service.list_employee_requests(
+            db,
+            employee.employee_number,
+        )
+    )
+    open_background_request = next(
+        (
+            item
+            for item in background_requests
+            if item.status.value
+            in {"REQUESTED", "SUBMISSION_UNKNOWN", "PENDING"}
+        ),
+        None,
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/employee_detail.html",
+        context={
+            "employee": employee,
+            "change_requests": change_requests,
+            "pending_request": pending_request,
+            "background_requests": background_requests,
+            "background_result_request_ids": background_result_request_ids,
+            "open_background_request": open_background_request,
+            "background_error": background_error,
+            "background_request_reason": background_request_reason,
+            "current_user": admin,
+        },
+        status_code=status_code,
+    )
 
 
 @router.get("/employees")
@@ -20,16 +74,22 @@ def employee_list(
     db: Annotated[Session, Depends(get_db)],
     admin: Annotated[Employee, Depends(require_admin)],
 ):
-    employees = employee_service.list_employees(db)
     pending_employee_numbers = (
         change_request_service.get_pending_employee_numbers(db)
     )
+    background_attention_employee_numbers = (
+        background_check_service.get_employee_numbers_requiring_attention(db)
+    )
+    attention_employee_numbers = (
+        pending_employee_numbers | background_attention_employee_numbers
+    )
+    employees = employee_service.list_employees(db)
     return templates.TemplateResponse(
         request=request,
         name="admin/employee_list.html",
         context={
             "employees": employees,
-            "pending_employee_numbers": pending_employee_numbers,
+            "attention_employee_numbers": attention_employee_numbers,
             "current_user": admin,
         },
     )
@@ -120,23 +180,194 @@ def employee_detail(
             detail="직원을 찾을 수 없습니다.",
         )
 
-    change_requests = change_request_service.get_employee_requests(
-        db,
-        employee_number,
+    return _employee_detail_response(request, db, admin, employee)
+
+
+@router.post("/employees/{employee_number}/background-checks")
+def request_background_check(
+    employee_number: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+    request_reason: Annotated[str, Form()] = "",
+):
+    employee = employee_service.get_employee_detail(db, employee_number)
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="직원을 찾을 수 없습니다.",
+        )
+    try:
+        background_check_service.create_request(
+            db=db,
+            employee_number=employee_number,
+            requested_by_employee_number=admin.employee_number,
+            request_reason=request_reason,
+        )
+    except background_check_service.BackgroundCheckAlreadyOpenError as error:
+        return _employee_detail_response(
+            request,
+            db,
+            admin,
+            employee,
+            background_error=str(error),
+            background_request_reason=request_reason,
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    except background_check_service.BackgroundCheckError as error:
+        return _employee_detail_response(
+            request,
+            db,
+            admin,
+            employee,
+            background_error=str(error),
+            background_request_reason=request_reason,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return RedirectResponse(
+        url=f"/admin/employees/{employee_number}",
+        status_code=303,
     )
-    pending_request = change_request_service.get_pending_request(
+
+
+@router.post("/background-check-requests/{request_id}/view")
+def view_background_check_result(
+    request_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+    access_reason: Annotated[str, Form()] = "",
+):
+    background_request = background_check_service.get_request(db, request_id)
+    if background_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Background Check 요청을 찾을 수 없습니다.",
+        )
+    employee = employee_service.get_employee_detail(
         db,
-        employee_number,
+        background_request.employee_number,
     )
-    return templates.TemplateResponse(
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="직원을 찾을 수 없습니다.",
+        )
+    try:
+        result_view = background_check_service.view_result(
+            db=db,
+            request_id=request_id,
+            admin=admin,
+            access_reason=access_reason,
+        )
+    except background_check_service.BackgroundCheckResultUnavailableError as error:
+        return _employee_detail_response(
+            request,
+            db,
+            admin,
+            employee,
+            background_error=str(error),
+            status_code=status.HTTP_410_GONE,
+        )
+    except background_check_service.BackgroundCheckError as error:
+        return _employee_detail_response(
+            request,
+            db,
+            admin,
+            employee,
+            background_error=str(error),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    response = templates.TemplateResponse(
         request=request,
-        name="admin/employee_detail.html",
+        name="admin/background_check_result.html",
         context={
-            "employee": employee,
-            "change_requests": change_requests,
-            "pending_request": pending_request,
             "current_user": admin,
+            "employee": employee,
+            "result_view": result_view,
         },
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@router.get("/background-check-requests/{request_id}/status")
+def background_check_status(
+    request_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    del admin
+    try:
+        status_view = background_check_service.get_status(db, request_id)
+    except background_check_service.BackgroundCheckNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    return JSONResponse(
+        content={
+            "status": status_view.status.value,
+            "is_final": status_view.is_final,
+            "result_available": status_view.result_available,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post("/background-check-requests/{request_id}/acknowledge")
+def acknowledge_background_check_result(
+    request_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    try:
+        background_request = background_check_service.acknowledge_result(
+            db=db,
+            request_id=request_id,
+            admin=admin,
+        )
+    except background_check_service.BackgroundCheckNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    except background_check_service.BackgroundCheckResultUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=str(error),
+        ) from error
+    return RedirectResponse(
+        url=f"/admin/employees/{background_request.employee_number}",
+        status_code=303,
+    )
+
+
+@router.post("/background-check-requests/{request_id}/refresh")
+def refresh_background_check_status(
+    request_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Employee, Depends(require_admin)],
+):
+    del admin
+    try:
+        background_request = background_check_service.resume_safe_lookup(
+            db,
+            request_id,
+        )
+    except background_check_service.BackgroundCheckNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    except background_check_service.BackgroundCheckNotAllowedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    return RedirectResponse(
+        url=f"/admin/employees/{background_request.employee_number}",
+        status_code=303,
     )
 
 
