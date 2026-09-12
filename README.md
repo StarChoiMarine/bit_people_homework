@@ -101,6 +101,7 @@ Python 3.12 이상을 권장합니다.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
+mkdir -p .secrets
 python -m app.core.generate_seed_credentials \
   --output .secrets/seed_credentials.json
 export SEED_CREDENTIALS_FILE=.secrets/seed_credentials.json
@@ -114,6 +115,8 @@ uvicorn app.main:app --workers 1 --host 0.0.0.0 --port 8000
 로컬 SQLite 파일의 기본 위치는 `data/employee_portal.db`입니다.
 
 ### Docker 실행
+
+로컬에서 Docker volume을 사용해 실행하는 예시입니다.
 
 ```bash
 docker build -t bit-people-portal .
@@ -129,6 +132,26 @@ Docker에서는 `DATABASE_PATH=/app/data/employee_portal.db`를 기본값으로 
 DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테이너를 교체해도 데이터가
 유지됩니다. SQLite와 애플리케이션 내부 폴러의 중복 실행을 피하기 위해 Uvicorn worker는
 한 개로 실행합니다.
+
+### EC2 배포 예시
+
+운영 환경에서는 DB와 자격증명을 서로 다른 host 경로에 보관하고, 자격증명 파일은 컨테이너에
+읽기 전용으로 연결합니다.
+
+```bash
+docker run -d \
+  --name employee-portal \
+  --restart unless-stopped \
+  -p 8080:8000 \
+  -v /opt/employee-portal/data:/app/data \
+  -v /opt/employee-portal/secrets/seed_credentials.json:/run/secrets/seed_credentials.json:ro \
+  -e DATABASE_PATH=/app/data/employee_portal.db \
+  -e SEED_CREDENTIALS_FILE=/run/secrets/seed_credentials.json \
+  employee-portal
+```
+
+`/opt/employee-portal/data`에는 SQLite DB를 보관하고, `/opt/employee-portal/secrets`에는
+권한 `600`인 자격증명 파일을 보관합니다. 두 경로 모두 Git 저장소 밖에 있어야 합니다.
 
 ### 환경 변수
 
@@ -146,9 +169,9 @@ DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테�
 
 ## 시드 계정
 
-아래 계정은 기능 확인을 위한 초기 데이터입니다. 초기 비밀번호는 이 문서에 공개하지 않고
-별도로 전달합니다. 비밀번호는 데이터베이스에 평문으로 저장하지 않으며 시작 시 임의 salt를
-사용해 `scrypt` 해시로 저장합니다.
+아래 계정은 기능 확인을 위한 초기 데이터입니다. 비밀번호는 README와 Git 이력에 포함하지
+않고 별도의 자격증명 파일로 전달합니다. 데이터베이스에는 평문 대신 임의 salt를 사용한
+`scrypt` 해시만 저장합니다.
 
 | 사번 | 성명 | 성 / 이름 | 역할 | 로그인 아이디 |
 |---|---|---|---|---|
@@ -167,9 +190,8 @@ DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테�
 직원 로그인 아이디는 사번에서 실행 중에 역추론하지 않습니다. `Employee.login_id`에
 명시적으로 저장되어 있으므로 향후 사번 형식이 바뀌어도 인증 로직은 영향을 받지 않습니다.
 
-새 계정을 만들거나 비밀번호를 변경할 때는 8자 이상이며 특수문자를 포함해야 합니다.
-초기 비밀번호는 평가용이므로 실제 운영 배포 전 모두 교체하고, 별도의 안전한 전달 및 최초
-로그인 변경 정책을 적용해야 합니다.
+새 계정을 만들거나 사용자가 비밀번호를 변경할 때는 8자 이상이며 특수문자를 포함해야
+합니다. 시드 자격증명은 더 강한 별도 정책을 적용합니다.
 
 자격증명 파일은 다음 형태이며 `.secrets/`는 Git에서 제외되어 있습니다.
 
@@ -185,15 +207,40 @@ DB 파일과 WAL 관련 파일은 `/app/data` volume에 저장되므로 컨테�
 이 정책을 만족하는 24자리 무작위 비밀번호와 권한 `600`인 파일을 만들며, 기존 파일이
 있으면 덮어쓰지 않고 중단합니다.
 
-이미 생성된 DB의 비밀번호를 새 자격증명으로 일괄 교체하려면 DB와 비밀 파일을 연결한
-환경에서 다음 일회성 명령을 실행합니다.
+### DB 초기화와 자격증명 파일
+
+- 빈 DB로 시작하면 테이블을 만든 뒤 자격증명 파일을 사용해 관리자 1명과 직원 10명을
+  생성합니다.
+- 기존 DB에서는 같은 사번의 계정을 다시 만들거나 비밀번호를 덮어쓰지 않습니다.
+- 기존 DB를 단순히 재시작하는 것만으로는 비밀번호가 변경되지 않습니다.
+- 현재 구현은 시작할 때 자격증명 파일의 형식을 검증하므로 기존 DB를 재사용하더라도
+  `SEED_CREDENTIALS_FILE`과 읽기 전용 mount가 필요합니다.
+- DB 파일을 삭제하고 빈 volume으로 다시 시작하면 현재 자격증명 파일의 값으로 새 계정을
+  생성합니다.
+
+### 기존 DB 비밀번호 교체
+
+이미 생성된 DB의 비밀번호를 새 자격증명으로 일괄 교체하려면 먼저 실행 중인 애플리케이션을
+중지하고 SQLite 데이터 디렉터리를 백업합니다. 그다음 새 이미지에 운영 DB와 자격증명 파일을
+연결하여 일회성 회전 명령을 실행합니다.
 
 ```bash
-python -m app.core.rotate_seed_passwords
+docker run --rm \
+  -v /opt/employee-portal/data:/app/data \
+  -v /opt/employee-portal/secrets/seed_credentials.json:/run/secrets/seed_credentials.json:ro \
+  -e DATABASE_PATH=/app/data/employee_portal.db \
+  -e SEED_CREDENTIALS_FILE=/run/secrets/seed_credentials.json \
+  employee-portal \
+  python -m app.core.rotate_seed_passwords
 ```
 
 이 명령은 11개 계정의 비밀번호를 다시 해싱하고 모든 활성 세션을 폐기하며, 각 변경을
-감사로그에 기록한 뒤 하나의 트랜잭션으로 커밋합니다.
+`CREDENTIAL_EXPOSURE_ROTATION` 사유로 감사로그에 기록한 뒤 하나의 트랜잭션으로 커밋합니다.
+도중에 오류가 발생하면 비밀번호 변경과 세션 폐기를 모두 rollback합니다.
+
+교체 후에는 새 자격증명으로 로그인이 성공하고 이전 자격증명으로 로그인이 실패하는지
+확인해야 합니다. 비밀번호 파일을 내려받을 때는 SSH/SCP처럼 암호화된 채널을 사용하고,
+메신저·이메일·Git으로 전달하지 않습니다.
 
 ## 인증과 권한 처리
 
@@ -374,6 +421,7 @@ Background Check를 실패로 단정하지 않고 자동 빠른 조회만 중지
 - 캐시 방지: 결과 HTML과 상태 API에 `Cache-Control: no-store`
 - 감사 가능성: 요청, 열람, 확인 및 파기 작업을 AuditLog에 기록
 - 비밀정보 제외: 비밀번호, 비밀번호 해시 및 Background Check 상세 결과는 감사로그에 기록하지 않음
+- 자격증명 분리: 시드 비밀번호 파일은 Git과 Docker build context에서 제외하고 컨테이너에 읽기 전용 mount
 - 세션 통제: 퇴사 및 보안 관련 계정 변경 시 기존 세션 즉시 무효화
 - 개인정보 스냅샷: 요청 당시 전송값은 관리자 전용 요청 메타데이터에만 보관하고 감사로그에는 복사하지 않음
 
@@ -413,7 +461,7 @@ pytest -q
 - 상세 민감정보 비저장
 - 기존 SQLite 스키마 마이그레이션
 
-현재 전체 테스트 결과는 `19 passed`입니다.
+현재 전체 테스트 결과는 `20 passed`입니다.
 
 ## 현재 범위와 운영 시 고려사항
 
@@ -422,5 +470,6 @@ pytest -q
 확장할 경우 PostgreSQL 같은 서버형 DB와 별도 작업 큐 및 단일 스케줄러로 폴러를 분리하는
 것이 적절합니다.
 
-또한 실제 운영 전에는 초기 비밀번호 교체, HTTPS와 Secure 쿠키 강제, CSRF 보호,
-비밀값 관리, EBS 암호화, 접근 로그 정책과 백업·복구 절차를 추가로 점검해야 합니다.
+실제 운영에서는 HTTPS와 Secure 쿠키 강제, CSRF 보호, 비밀값 관리, EBS 암호화, 접근 로그
+정책과 백업·복구 절차를 추가로 점검해야 합니다. 자격증명 파일과 DB 백업도 개인정보로
+분류하여 최소 인원만 접근할 수 있게 관리해야 합니다.
